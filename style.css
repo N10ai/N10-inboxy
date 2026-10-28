@@ -406,3 +406,63 @@ h1 { font-size: clamp(36px,4vw,59px); font-weight: 600; letter-spacing: -2.6px; 
  .column-quick-add input { font-size: 12px; padding: 12px 6px; }
  .column-quick-add button { min-height: 38px; min-width: 32px; }
 }
+
+/* Clear separation: white cards, neutral lanes, orange only for attention. */
+.board { gap: 18px; }
+.column { background: #f0f0f3; border-color: #e0e0e6; padding: 12px; }
+.column-head { color: #41414b; font-weight: 650; padding-bottom: 14px; }
+.column-head .number { background: #e2e2e8; color: #656571; }
+.column-add { color: #747480; }
+.operation-card {
+ position: relative;
+ border: 1px solid #d3d3dd;
+ border-top: 3px solid #5b5b68;
+ background: #fff;
+ box-shadow: 0 3px 8px #1616220b,0 1px 2px #16162208;
+ margin-bottom: 14px;
+}
+.operation-card:hover { border-color: #aaaab8; border-top-color: #373742; box-shadow: 0 8px 20px #16162213; }
+.operation-card.priority-urgent { border-top-color: #ff4b2b; }
+.operation-card.priority-high { border-top-color: #b7513d; }
+.operation-card.priority-low { border-top-color: #a5a5b2; }
+.operation-card.is-complete { border-top-color: #8c8c99; }
+.operation-card .ref { color: #656571; font-size: 10px; font-weight: 550; }
+.operation-card h3 { color: #22222b; font-size: 14px; }
+.operation-card .customer { color: #747480; }
+.drag-handle { color: #8b8b99; }
+.next-action { background: #f0f0f4; border-color: #e7e7ee; }
+.next-action>span:first-child { color: #747480; font-weight: 600; }
+.next-action>strong { color: #464652; font-weight: 500; }
+.next-action>span:last-child { color: #838391; }
+.next-action:hover { background: #fff0e9; border-color: #ffb49e; }
+.blocked-line { color: #9a3926; background: #fff2ec; border-left: 2px solid #ff8c6b; padding: 8px 9px; border-radius: 0 5px 5px 0; font-size: 10px; }
+.card-signals { color: #727280; }
+.card-signals .badge { font-size: 10px; border: 1px solid #e2e2e9; background: #f1f1f5; color: #5c5c6a; }
+.card-signals .badge.Urgent { color: #a52914; background: #ffebe4; border-color: #ffc9b8; }
+.card-signals .badge.High { color: #8f4431; background: #fcf0e9; border-color: #edccbd; }
+.card-signals button { color: #5c5c6a; }
+.overdue-pill { background: #fff0e9; color: #ab2e17; border: 1px solid #ffbda8; border-radius: 5px; font-size: 10px; padding: 4px 6px; font-weight: 600; }
+.operation-card .card-bottom { border-top-color: #e7e7ee; }
+.operation-card .card-owner { color: #51515f; }
+.operation-card .avatar { background: #e8e8ef; color: #4c4c5b; border-color: #dcdce5; }
+.card-due { color: #6f6f7e; }
+.card-due.overdue { color: #b9361d; font-weight: 550; }
+.card-move { border-top-color: #e4e4ec; background: #f8f8fa; }
+.card-move>span { color: #777786; }
+.card-move select { color: #4d4d5c; font-weight: 500; }
+.column-quick-add { background: #ffffff80; border-color: #dedee6; border-style: dashed; }
+.column-quick-add input::placeholder { color: #7f7f8d; }
+.column-quick-add button { color: #7d7d8d; }
+.drop-placeholder { color: #838391; border-color: #cfcfd9; background: #ffffff50; }
+.column.drop-over { background: #ffebe2; border-color: #ff704c; box-shadow: inset 0 0 0 1px #ff704c; }
+.column-cards { position: relative; }
+.drop-before::before,.drop-at-end::after { content: ''; position: absolute; height: 3px; background: #ff4b2b; border-radius: 3px; box-shadow: 0 0 0 2px #fff5ef; left: 0; right: 0; pointer-events: none; z-index: 4; }
+.drop-before::before { top: -10px; }
+.drop-at-end::after { bottom: 4px; }
+.drag-source { opacity: .24; }
+.drag-ghost { border: 1px solid #ff8064; border-top: 3px solid #ff4b2b; box-shadow: 0 20px 50px #14142230; }
+@media(max-width:760px) {
+ .column { background: #eeeeF2; }
+ .card-move select { min-height: 35px; }
+ .card-due { font-size: 10px; }
+}
