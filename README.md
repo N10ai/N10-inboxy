@@ -16,6 +16,8 @@ Open http://localhost:3000. Static hosting can serve the repository root. Do not
 
 ## Working features
 
+- Focus control room with a priority spotlight, ranked action stream and group spaces.
+- Custom groups and local people profiles: create/edit, memberships, dynamic task assignment, and rename propagation. Existing browser data migrates automatically.
 - Board, list, and ranked Do next views; search and team/owner filters.
 - Editable tasks, ownership, priorities, deadlines, follow-ups, operational instructions and cost/cutoff impact.
 - Shipment records, parent/subtasks, cross-team dependencies, completion guards and activity history.
@@ -30,7 +32,7 @@ Open http://localhost:3000. Static hosting can serve the repository root. Do not
 
 This is a **local functional prototype**, preloaded with fictional sample data. It is not ready to operate as a shared production system.
 
-Data stays in localStorage in the current browser. Team filters are not authorization, user names are demo identities, and changes do not sync across devices. Do not put sensitive operational data on a shared computer. Back up data before clearing browser storage.
+Data stays in localStorage in the current browser. Team filters are not authorization, people profiles are local assignment records, not authenticated accounts, and changes do not sync across devices. Do not put sensitive operational data on a shared computer. Back up data before clearing browser storage.
 
 Email is not connected: no OAuth, mailbox synchronization, attachment ingestion or in-app sending. Drafts stay local; opening a mail app requires the user to review/send there. Only unencoded plain-text .eml files are supported. Exported customer updates are static snapshots, not live or revocable links. No notifications are delivered while the app is closed.
 
