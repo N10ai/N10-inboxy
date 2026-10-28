@@ -50,3 +50,20 @@ export function seed() {
  {...base,id:'t8',title:'Reconcile handling charges',shipmentId:'s2',team:'Accounting',owner:'Emma',status:'Ready to bill',due:date(20),nextAction:'Check approved charges against invoice'}];
  return {version:1,shipments,tasks,emails:[{id:'e1',from:'Maria Torres <maria@example.com>',subject:'Pickup request · ABC Imports · 4 pallets',body:'Please arrange pickup for our 4 pallets. Pallet 3 needs wrapping before collection. Please confirm the pickup appointment and wrapping charge.',date:date(-2),taskId:'t1'},{id:'e2',from:'Luis Vega <luis@example.com>',subject:'Revised delivery quote — Andes Trading',body:'Could you send the revised delivery rate and confirm when the shipment can be released?',date:date(-1),taskId:null}],drafts:[]};
 }
+
+// One transition rule for board drops, menus, and completion actions.
+export function transitionIssue(task, status, tasks) {
+ if (!STATUSES.includes(status)) return 'Choose a valid status.';
+ return status === 'Completed' ? completionIssue(task, tasks) : '';
+}
+export function moveTask(tasks, id, status, beforeId=null) {
+ const task=tasks.find(t=>t.id===id);
+ if(!task) return 'Task no longer exists.';
+ const issue=transitionIssue(task,status,tasks); if(issue) return issue;
+ const column=tasks.filter(t=>t.id!==id&&t.status===status).sort((a,b)=>(a.boardOrder??tasks.indexOf(a))-(b.boardOrder??tasks.indexOf(b)));
+ const index=beforeId?column.findIndex(t=>t.id===beforeId):-1;
+ column.splice(index<0?column.length:index,0,task);
+ task.status=status;
+ column.forEach((t,i)=>t.boardOrder=i);
+ return '';
+}

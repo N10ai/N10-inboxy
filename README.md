@@ -18,6 +18,8 @@ Open http://localhost:3000. Static hosting can serve the repository root. Do not
 
 - Focus control room with a priority spotlight, ranked action stream and group spaces.
 - Custom groups and local people profiles: create/edit, memberships, dynamic task assignment, and rename propagation. Existing browser data migrates automatically.
+- Default operational board with draggable/reorderable cards, touch drag grips, status menus and completion guards.
+- Per-column Enter-to-create task entry, a compact new-task form and next-action/assignment/date quick editing.
 - Board, list, and ranked Do next views; search and team/owner filters.
 - Editable tasks, ownership, priorities, deadlines, follow-ups, operational instructions and cost/cutoff impact.
 - Shipment records, parent/subtasks, cross-team dependencies, completion guards and activity history.
