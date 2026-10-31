@@ -1,0 +1,31 @@
+-- Run against a test database or as a single transaction. No fixtures persist.
+begin;
+insert into auth.users(id,email,email_confirmed_at) values('10000000-0000-4000-8000-000000000011','mail-test@example.invalid',now());
+insert into public.workspaces(id,name) values('20000000-0000-4000-8000-000000000011','Mail verification');
+insert into public.workspace_members values('20000000-0000-4000-8000-000000000011','10000000-0000-4000-8000-000000000011','owner');
+set local role service_role;
+select public.inboxy_mail_service('state_create','{"hash":"test-state-hash","workspace":"20000000-0000-4000-8000-000000000011","user":"10000000-0000-4000-8000-000000000011","provider":"gmail","verifier":"test-verifier"}');
+select public.inboxy_mail_service('state_take','{"hash":"test-state-hash"}');
+do $$begin perform public.inboxy_mail_service('state_take','{"hash":"test-state-hash"}');raise exception 'Expected replay denial';exception when others then if sqlerrm<>'Invalid or expired connection request' then raise;end if;end$$;
+select set_config('inboxy.mail_test_id',(public.inboxy_mail_service('connect','{"workspace":"20000000-0000-4000-8000-000000000011","user":"10000000-0000-4000-8000-000000000011","provider":"gmail","email":"mail-test@example.invalid","tokens":{"access_token":"fixture-only","refresh_token":"fixture-refresh"}}')->>'id'),true);
+select public.inboxy_mail_service('ingest',jsonb_build_object('connection',current_setting('inboxy.mail_test_id'),'messages',jsonb_build_array(jsonb_build_object('id','mail-test','connectionId',current_setting('inboxy.mail_test_id'),'from','a@example.invalid','subject','Cargo','body','Ready','date','2026-10-31','taskId',null))));
+reset role;
+update public.emails set data=data||'{"taskId":"keep-task-link"}' where id='mail-test' and workspace_id='20000000-0000-4000-8000-000000000011';
+set local role service_role;
+select public.inboxy_mail_service('ingest',jsonb_build_object('connection',current_setting('inboxy.mail_test_id'),'messages',jsonb_build_array(jsonb_build_object('id','mail-test','connectionId',current_setting('inboxy.mail_test_id'),'from','a@example.invalid','subject','Updated cargo','body','Still ready','date','2026-10-31','taskId',null))));
+reset role;
+do $$begin
+if (select count(*) from public.emails where id='mail-test' and workspace_id='20000000-0000-4000-8000-000000000011')<>1 then raise exception 'Deduplication failed';end if;
+if (select data->>'taskId' from public.emails where id='mail-test' and workspace_id='20000000-0000-4000-8000-000000000011')<>'keep-task-link' then raise exception 'Task link lost';end if;
+end$$;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000011',true);
+do $$begin perform public.inboxy_mail_service('tokens',jsonb_build_object('connection',current_setting('inboxy.mail_test_id')));raise exception 'Expected token denial';exception when insufficient_privilege then null;end$$;
+reset role;
+select set_config('inboxy.test_secret_id',(select secret_id::text from inboxy_private.mail_tokens where connection_id=current_setting('inboxy.mail_test_id')::uuid),true);
+set local role service_role;
+select public.inboxy_mail_service('disconnect',jsonb_build_object('connection',current_setting('inboxy.mail_test_id')));
+reset role;
+do $$begin if exists(select 1 from vault.secrets where id=current_setting('inboxy.test_secret_id')::uuid) then raise exception 'Disconnected token was retained';end if;end$$;
+select 'state replay, deduplication, task-link preservation, token isolation and cleanup verified' as verification;
+rollback;

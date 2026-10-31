@@ -54,3 +54,10 @@ export async function accessPanel(container){
  container.querySelectorAll('[data-revoke]').forEach(b=>b.onclick=async()=>{try{await rpc('inboxy_revoke_access',{w:cloud.workspace.id,e:b.dataset.revoke});await accessPanel(container);}catch(err){container.querySelector('#access-feedback').textContent=err.message;}});
 }
 window.addEventListener('beforeunload',e=>{if(cloud.pending||cloud.failed){e.preventDefault();e.returnValue='';}});
+
+export async function mailAction(action,args={}){
+ if(!cloud.workspace)throw Error('Sign in and open a workspace to connect email.');
+ const {data,error}=await client.functions.invoke('inboxy-mail',{body:{action,workspace:cloud.workspace.id,...args}});
+ if(error){let message=error.message;try{const body=await error.context.json();message=body.error||message;}catch{}throw Error(message);}
+ if(data?.error)throw Error(data.error);return data;
+}
