@@ -19,7 +19,7 @@ Open http://localhost:3000. Static hosting can serve the repository root. Do not
 ## Working features
 
 - Focus control room with a priority spotlight, ranked action stream and group spaces.
-- Custom groups and local people profiles: create/edit, memberships, dynamic task assignment, and rename propagation. Existing browser data migrates automatically.
+- Custom groups (including color/icon, deletion with task reassignment) and people profiles: create/edit, memberships, dynamic task assignment, and rename propagation. Existing browser data migrates automatically.
 - Default operational board with draggable/reorderable cards, touch drag grips, status menus and completion guards.
 - Per-column Enter-to-create task entry, a compact new-task form and next-action/assignment/date quick editing.
 - Board, list, and ranked Do next views; search and team/owner filters.
@@ -44,7 +44,10 @@ The publishable key is safe to ship; no secret or service-role key is in the cli
 
 `supabase/schema.sql` records the schema and controlled RPC definitions applied using Supabase migrations. Configure Auth’s Site URL/allowed redirects for `https://n10ai.github.io/N10-inboxy/` in the Supabase dashboard before relying on confirmation/reset redirects. The connector does not expose Auth configuration. Until configured, confirmation can redirect to Supabase’s default localhost URL; return to Inboxy and sign in after confirming. Production email delivery also needs an appropriate SMTP configuration.
 
-Email is not connected: no OAuth, mailbox synchronization, attachment ingestion or in-app sending. Drafts save in the selected workspace; opening a mail app requires the user to review/send there. Only unencoded plain-text .eml files are supported. Exported customer updates are static snapshots, not live or revocable links. No notifications are delivered while the app is closed.
+Gmail and Microsoft 365/Outlook OAuth connection, inbox sync and explicit replies are implemented. Register the provider OAuth app and configure its secrets before connecting. See [email setup](docs/email-integrations.md), also available in the app under Connections & data. Sync runs on demand in batches of 25, with older-message pagination. Attachments, background sync, shared-mailbox delegation and automatic notifications are not implemented. Live provider end-to-end validation remains pending OAuth credentials and a consenting test account. Exported customer updates remain static snapshots.
+
+Supabase’s advisor reports leaked-password protection is currently disabled; enable it in Auth’s password security configuration if available on your plan: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
+
 
 Dates in form fields use the device's local time. Prioritization is rule-based (deadline, follow-up, ownership, impact and dependent work), not AI. The Do next view includes blocked work with a visible blocked reason so it can be escalated.
 
