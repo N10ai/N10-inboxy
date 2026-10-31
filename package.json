@@ -5,7 +5,15 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check": "node --check app.js && node --check domain.js",
-    "dev": "node server.js"
+    "check": "node --check app.js && node --check domain.js && node --check cloud.js",
+    "dev": "node server.js",
+    "build": "esbuild cloud.js --bundle --format=esm --outfile=cloud.bundle.js --minify"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.118.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "jsdom": "30.1.3"
   }
 }
