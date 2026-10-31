@@ -67,3 +67,15 @@ export function moveTask(tasks, id, status, beforeId=null) {
  column.forEach((t,i)=>t.boardOrder=i);
  return '';
 }
+
+export function removeGroup(workspace,groupId,targetId){
+ const group=workspace.groups.find(g=>g.id===groupId);
+ if(!group)throw Error('Group not found.');
+ if(workspace.groups.length===1)throw Error('Keep at least one group for new requests. Create a replacement group first.');
+ const tasks=workspace.tasks.filter(t=>t.team===group.name);
+ const target=workspace.groups.find(g=>g.id===targetId&&g.id!==groupId);
+ if(tasks.length&&!target)throw Error('Choose where to move this group’s tasks.');
+ tasks.forEach(t=>t.team=target.name);
+ workspace.groups=workspace.groups.filter(g=>g.id!==groupId);
+ return {moved:tasks.length,target:target?.name};
+}
