@@ -80,5 +80,5 @@ Deno.serve(async req=>{
  return json({sent:true});
  }
  return json({error:'Unknown action'},400);
- }catch(e){if(callback)return Response.redirect(APP_URL+'?mail=failed',303);return json({error:e.message||'Mailbox request failed'},400);}
+ }catch(e){console.error('Inboxy mailbox failure:',e.message||'Unknown error');if(callback)return Response.redirect(APP_URL+'?mail=failed',303);return json({error:e.message||'Mailbox request failed'},400);}
 });
