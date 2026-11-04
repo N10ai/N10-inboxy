@@ -93,7 +93,7 @@ function paintDrop(target){
  else target.col.querySelector('.column-cards').classList.add('drop-at-end');
 }
 
-function loadCloudState(snapshot){const params=new URL(location.href).searchParams,result=params.get('mail');if(result){page='settings';history.replaceState(null,'',location.pathname);if(result==='complete'){const args={provider:params.get('mail_provider'),code:params.get('mail_code'),state:params.get('mail_state')};setTimeout(()=>mailAction('complete',args).then(()=>{renderMailPanel();toast('Mailbox connected. Choose Sync inbox to import messages.');}).catch(e=>toast('Connection failed: '+e.message)),0);}else setTimeout(()=>toast(result==='cancelled'?'Mailbox connection cancelled.':'Mailbox connection failed. Check the provider setup and try again.'),100);}
+function loadCloudState(snapshot){const params=new URL(location.href).searchParams,result=params.get('mail');if(result){page='settings';history.replaceState(null,'',location.pathname);if(result==='complete'){const args={provider:params.get('mail_provider'),code:params.get('mail_code'),state:params.get('mail_state')};setTimeout(()=>mailAction('complete',args).then(()=>{renderMailPanel();toast('Mailbox connected. Choose Sync inbox to import messages.');}).catch(e=>openDialog('Mailbox connection did not finish',`<p>${esc(e.message)}</p><p>The mailbox was not connected. Share this error text so we can identify the cause.</p>`)),0);}else setTimeout(()=>toast(result==='cancelled'?'Mailbox connection cancelled.':'Mailbox connection failed. Check the provider setup and try again.'),100);}
  appReady=true;state=snapshot;syncDirectory();selectedEmail=state.emails[0]?.id;render();
 }
 function cloudSaveError(error){
