@@ -24,3 +24,25 @@ test('signed-in workspace loads without sample tasks and saves a quick task',asy
 
 test('group editor customizes color and icon, and empty-group deletion works in the UI',async()=>{const {dom,w}=await app();try{w.document.querySelector('#demo-mode').click();w.document.querySelector('[data-page="groups"]').click();w.document.querySelector('#new-group').click();const form=w.document.querySelector('#group-form');form.elements.name.value='Dispatch';form.elements.color.value='#225588';form.elements.icon.value='◈';form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));const saved=JSON.parse(w.localStorage.getItem('inboxy.workspace.v1'));const group=saved.groups.find(g=>g.name==='Dispatch');assert.equal(group.color,'#225588');assert.equal(group.icon,'◈');w.document.querySelector(`[data-edit-group="${group.id}"]`).click();w.document.querySelector('#delete-group').click();w.document.querySelector('#delete-group-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert.equal(JSON.parse(w.localStorage.getItem('inboxy.workspace.v1')).groups.some(g=>g.id===group.id),false);}finally{dom.window.close();}});
 test('email connections show missing setup and an actionable setup guide',async()=>{const {dom,w}=await app(true);try{w.document.querySelector('[data-page="settings"]').click();await new Promise(r=>setTimeout(r,100));assert.match(w.document.querySelector('#mail-integrations').textContent,/Provider setup needed/);assert.equal(w.document.querySelector('[data-mail-connect]').disabled,true);w.document.querySelector('[data-mail-setup]').click();assert.match(w.document.querySelector('#detail').textContent,/GOOGLE_MAIL_CLIENT_SECRET/);}finally{dom.window.close();}});
+
+test('pickup workflow creates selected subtasks and checks them off from the parent', async () => {
+ const {dom,w,snapshot}=await app(true);
+ try {
+  w.document.querySelector('#new-task').click();
+  const form=w.document.querySelector('#quick-task-form');
+  form.elements.title.value='Pickup for ABC Imports';
+  form.elements.workflow.value='Pickup';
+  form.elements.workflow.dispatchEvent(new w.Event('change'));
+  assert.equal(form.elements.workflowStep.length,6);
+  form.elements.workflowStep[5].checked=false;
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await new Promise(r=>setTimeout(r,100));
+  const [parent,...steps]=snapshot.tasks;
+  assert.equal(steps.length,5);
+  assert.ok(steps.every(step=>step.parentId===parent.id && step.team===parent.team));
+  w.document.querySelector(`[data-task="${parent.id}"]`).click();
+  w.document.querySelector(`[data-complete-child="${steps[0].id}"]`).click();
+  await new Promise(r=>setTimeout(r,100));
+  assert.equal(snapshot.tasks.find(task=>task.id===steps[0].id).status,'Completed');
+ } finally {dom.window.close();}
+});
