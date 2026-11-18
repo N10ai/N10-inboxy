@@ -262,7 +262,7 @@ function inboxHTML(){
   ${thread.shipmentIds.map(id=>`<span class="actions"><button data-email-operation="${esc(id)}">${esc(shipment(id)?.reference)}</button><button data-unlink-operation="${esc(id)}">Unlink operation</button></span>`).join('')}
   ${inboxFilter==='Trash'?'':emailReview(e,reviewTasks)}
   ${inboxFilter!=='Trash'&&captureEmailId===e.id?composerHTML(e):''}
-  ${thread.messages.map((message,index)=>`<details class="mail-message" ${index===0?'open':''}><summary><strong>${esc(message.from)}</strong><time>${esc(fmt(message.date))}</time></summary><pre>${esc(message.body)}</pre>${attachmentButtons(message)}</details>`).join('')}
+  ${thread.messages.map((message,index)=>`<details class="mail-message" ${(index===0||message.id===selectedEmail)?'open':''}><summary><strong>${esc(message.from)}</strong><time>${esc(fmt(message.date))}</time></summary><pre>${esc(message.body)}</pre>${attachmentButtons(message)}</details>`).join('')}
   `:'<p class="muted">Select a conversation to review.</p>'}</section>
  </div>${state.drafts.length?`<details class="quick-more mailbox-drafts"><summary>Saved drafts · ${state.drafts.length}</summary>${state.drafts.map(d=>`<div class="panel"><strong>${esc(d.subject)}</strong><p class="muted">${esc(d.to)} · ${esc(fmt(d.date))}</p><p style="white-space:pre-wrap">${esc(d.body)}</p>${state.emails.some(e=>e.id===d.emailId)?`<button data-resume-draft="${esc(d.id)}">Continue draft</button>`:''}</div>`).join('')}</details>`:''}`;
 }
@@ -482,7 +482,7 @@ function bindComposer(email){
   const status=email?'Up next':captureStatus;
   if(steps.length&&status==='Completed')return toast('Add checklist tasks to an active column.');
   const draft=email?mailActionDraft:null;
-  const confirmed=draft&&form.elements.applySuggestions?.checked?{...draft}:{};
+  const confirmed={};
   if(form.elements.applySuggestions?.checked)for(const element of form.querySelectorAll('[data-suggested-field]'))confirmed[element.dataset.suggestedField]=element.value;
   const task=newTaskRecord({title,workflow:data.get('workflow'),status,owner:scope==='My next actions'?(myOwner()||'Unassigned'):owner==='All owners'?'Unassigned':owner,shipmentId:operationFilter,taskType:typeFilter,...confirmed});
   if(email&&draft?.requestKey){

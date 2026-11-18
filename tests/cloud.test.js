@@ -214,6 +214,7 @@ test('Gmail conversation supports independent actions, review, assignment, compl
   for(const index of [0,1]){
    click('[data-new-request="'+index+'"]');
    click('[name="applySuggestions"]');
+   if(index===0)doc.querySelector('#inline-capture [name=title]').value='Book confirmed pickup';
    submit('#inline-capture');click('[data-close]');
   }
   click('[data-email="mail-c"]');click('[data-review-request="0"]');
@@ -235,6 +236,7 @@ test('Gmail conversation supports independent actions, review, assignment, compl
   assert.equal(snapshot.tasks.find(t=>t.id===first).status,'Completed');
   assert.equal(snapshot.tasks.find(t=>t.id===second).status,'Up next');
   assert.ok(snapshot.tasks.every(t=>t.shipmentId===operation.id));
+  assert.ok(snapshot.tasks.some(t=>t.title==='Book confirmed pickup'));
   assert.equal(snapshot.emails.find(m=>m.id==='mail-a').taskIds.length,2);
   assert.equal(snapshot.tasks.filter(t=>t.cutoff==='2026-11-18T18:00').length,1);
   assert.equal(snapshot.emails.filter(m=>m.deletedAt).length,2);
