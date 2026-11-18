@@ -814,3 +814,28 @@ button { border-color: #fff7; }
 .mail-more summary{cursor:pointer;padding:.6rem}
 .mail-more[open]{flex-basis:100%}
 .mail-reader .mail-body{padding:clamp(.8rem,4vw,1.5rem);overflow-wrap:anywhere}
+
+#app .toolbar:has(#workspace-filter-toggle){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:.5rem;margin-bottom:.55rem}
+#app .toolbar:has(#workspace-filter-toggle) .segments{justify-self:start;max-width:100%;min-width:0;overflow:auto}
+#app #workspace-filter-toggle{display:grid;place-items:center;min-width:42px;min-height:42px;padding:0;border-radius:.65rem;background:#fff}
+#workspace-filter-toggle[aria-expanded=true]{box-shadow:inset 0 0 0 2px currentColor}
+.customer-picker{margin:.2rem 0 .6rem}
+.customer-picker>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;min-height:38px;padding:.35rem .65rem;border:1px solid var(--border);border-radius:.65rem;background:#fff;font-size:.85rem}
+.customer-picker>summary::-webkit-details-marker{display:none}
+.customer-picker-panel{display:grid;gap:.35rem;margin-top:.4rem;padding:.55rem;border:1px solid var(--border);border-radius:.65rem;background:#faf7f3}
+.customer-picker input,.customer-directory input,.add-task-property{width:100%;min-width:0;max-width:100%;padding:.55rem .65rem;border:1px solid var(--border);border-radius:.55rem;background:#fff;color:inherit;font-size:16px}
+[data-customer-matches]{display:grid;gap:.2rem}
+[data-customer-matches]:empty{display:none}
+[data-customer-matches] button,.customer-record button:first-child{text-align:left;overflow-wrap:anywhere}
+.customer-directory-top,.customer-record{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.45rem;margin-bottom:.65rem}
+.customer-directory-top button{white-space:nowrap}
+.customer-record button{min-height:42px}
+.add-task-property{margin:.5rem 0}
+.operator-inbox.mail-index{background:transparent;border:0;box-shadow:none;overflow:visible}
+.operator-inbox.mail-index .mail-list{display:grid;gap:.45rem;background:transparent}
+.operator-inbox.mail-index .mail-select-row{border:1px solid #b9a99b;border-radius:.7rem;background:#faf7f3;overflow:hidden}
+.operator-inbox.mail-index .mail-row{border:0;background:transparent}
+.operator-inbox.mail-index .mail-row:hover{background:#fff}
+.operator-inbox.mail-index .mail-row strong{font-size:.9rem}
+.operator-inbox.mail-index .mail-row small{color:#65584d}
+.operator-inbox.mail-index .mail-row small time{font-size:.72rem}

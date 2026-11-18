@@ -79,16 +79,18 @@ const captureDraft=currentComposer&&{
  context:currentComposer.dataset.context,
  title:currentComposer.elements.title.value,
  workflow:currentComposer.elements.workflow.value,
+ customer:currentComposer.elements.customerChoice.value,
  steps:[...currentComposer.querySelectorAll('[name=workflowStep]')].map(input=>input.checked),
 };
 const active=state.tasks.filter(t=>isBoardTask(t)&&t.status!=='Completed');
-$('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass-welcome"><span class="avatar">N10</span><span>Welcome to <strong>Inboxy</strong><small>Your operations, connected.</small></span></div><input class="search" id="search" aria-label="Search tasks, customers, references" placeholder="Search tasks, customers, references…" value="${esc(query)}"><div class="topbar-right"><span class="demo" data-cloud-status>${cloud.workspace?(cloud.failed?'Not saved · export before reload':cloud.pending?'Saving…':'Shared workspace'):'Local demo'}</span><button id="account-access" class="small">${cloud.workspace?'Account':'Sign in'}</button><span class="avatar">IA</span></div></header><aside class="sidebar"><div class="logo">inboxy<b>↗</b><small>OPERATIONS, CONNECTED</small></div><div class="workspace">${esc(cloud.workspace?.name||'N10 Logistics')} <span>${cloud.workspace?'Shared operations workspace':'Operations workspace · Demo'}</span></div><nav class="nav" aria-label="Workspace"><button data-page="today" class="${page==='today'?'active':''}"><span>Today</span></button><button data-page="workspace" class="${page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 3v18M15 3v18"/></svg> <span>Workspace</span><span class="count">${active.length}</span></button><button data-page="inbox" class="${page==='inbox'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/></svg> <span>Email inbox</span><span class="count">${state.emails.filter(e=>!e.taskId).length}</span></button><button data-page="shipments" class="${page==='shipments'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5v9l-9 5-9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v9M7.5 5.5l9 5"/></svg> <span>Shipments</span></button><button data-page="workload" class="${page==='workload'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/></svg> <span>Team workload</span></button><label>TEAM QUEUES</label>${TEAMS.map(t=>`<button data-team="${esc(t)}" class="${team===t&&page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="4"/></svg> <span>${esc(t)}</span><span class="count">${active.filter(x=>x.team===t).length}</span></button>`).join('')}<label>WORKSPACE</label><button data-page="groups" class="${page==='groups'?'active':''}">＋ <span>Groups & people</span></button><button data-page="settings" class="${page==='settings'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="white"/><circle cx="16" cy="17" r="3" fill="white"/></svg> <span>Connections & data</span></button></nav><footer><span class="avatar">IA</span> ${esc(cloud.user?.email||'Ignacio')}<br><span>Keep every handoff visible.</span></footer></aside><main class="main"><div class="content"><div class="eyebrow">N10 / OPERATIONS</div><div class="heading"><div><h1>${({today:'Today',workspace:team==='All teams'?'Operations inbox':team+' space',inbox:'Email inbox',shipments:'Shipments',workload:'Team workload',settings:'Workspace settings',groups:'Team & groups'})[page]}</h1><p class="muted">${({today:'New replies, deadlines, and follow-ups.',workspace:'',inbox:'Capture requests and keep the original instructions close.',shipments:'Keep tasks, handoffs, and customer updates together.',workload:'Spot overloaded queues and rebalance the work.',settings:'Manage local data and plan your live connections.',groups:'Create your groups. Bring in your people. Give every request a home.'})[page]}</p></div><div class="actions">${page==='groups'?'<button id="new-group">New group</button><button id="new-person">Add assignee</button><button id="team-access" class="primary">Team access</button>':''}${page==='inbox'&&!mailReading?'<button id="email-connections">Connections</button><button id="capture">Capture email</button><button id="inbox-sync" class="primary">Sync inbox</button>':''}${page==='shipments'?'<button class="primary" id="new-shipment">＋ New shipment</button>':['groups','inbox'].includes(page)?'':'<button class="primary" id="new-task">＋ New task</button>'}</div></div>${page==='workspace'?`${composerHTML()}<div class="toolbar"><div class="segments">${['Focus','Board','List','Do next'].map(v=>`<button data-view="${v}" class="${view===v?'active':''}">${v==='Board'?'▦':v==='List'?'☷':'↗'} ${v}</button>`).join('')}</div></div><details id="workspace-filters" class="workspace-filters" ${filtersOpen?'open':''}><summary aria-label="Filters" title="Filters"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4"/></svg></summary>${planningBar()}<div class="filters"><select id="team" aria-label="Filter by team">${options(['All teams',...TEAMS],team)}</select><select id="owner" aria-label="Filter by owner">${options(['All owners',...USERS],owner)}</select><select id="customer-filter" aria-label="Filter by customer"><option value="">All customers</option>${options([...new Set([...state.shipments.map(s=>s.customer),...state.tasks.map(taskCustomer)].filter(Boolean))].sort(),customerFilter)}</select><select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option>${options(STATUSES,statusFilter)}</select><input type="date" id="due-filter" aria-label="Filter by due date" title="Filter by due date" value="${esc(dueFilter)}"><select id="work-queue" aria-label="Filter by work queue"><option value="">All work</option>${options(Object.keys(workQueues),workQueue)}</select><button id="ftz-filter" class="small ${ftzOnly?'primary':''}" aria-pressed="${ftzOnly}">FTZ only</button><button id="customize-ftz" class="small">Task templates</button><button id="clear" class="small">Clear filters</button></div></details><div id="task-results">${taskResults()}</div><div class="bottom-note">${attention?'Showing overdue, unassigned, and follow-up-due tasks. ':''}${cloud.workspace?'Shared with your workspace. Team filters are views, not access permissions.':'Local demo: changes stay in this browser. Sign in to use shared data.'}</div>`:page==='today'?todayHTML():page==='inbox'?inboxHTML():page==='shipments'?shipmentsHTML():page==='workload'?workloadHTML():page==='groups'?groupsHTML():settingsHTML()}</div></main><nav class="glass-dock" aria-label="Quick navigation">${[['today','Today'],['workspace','Board'],['inbox','Inbox'],['shipments','Shipments'],['groups','Team']].map(([key,label])=>`<button data-page="${key}" class="${page===key?'active':''}">${label}</button>`).join('')}<button id="dock-add" aria-label="Create task">＋</button></nav></div>`;
+$('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass-welcome"><span class="avatar">N10</span><span>Welcome to <strong>Inboxy</strong><small>Your operations, connected.</small></span></div><input class="search" id="search" aria-label="Search tasks, customers, references" placeholder="Search tasks, customers, references…" value="${esc(query)}"><div class="topbar-right"><span class="demo" data-cloud-status>${cloud.workspace?(cloud.failed?'Not saved · export before reload':cloud.pending?'Saving…':'Shared workspace'):'Local demo'}</span><button id="account-access" class="small">${cloud.workspace?'Account':'Sign in'}</button><span class="avatar">IA</span></div></header><aside class="sidebar"><div class="logo">inboxy<b>↗</b><small>OPERATIONS, CONNECTED</small></div><div class="workspace">${esc(cloud.workspace?.name||'N10 Logistics')} <span>${cloud.workspace?'Shared operations workspace':'Operations workspace · Demo'}</span></div><nav class="nav" aria-label="Workspace"><button data-page="today" class="${page==='today'?'active':''}"><span>Today</span></button><button data-page="workspace" class="${page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 3v18M15 3v18"/></svg> <span>Workspace</span><span class="count">${active.length}</span></button><button data-page="inbox" class="${page==='inbox'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/></svg> <span>Email inbox</span><span class="count">${state.emails.filter(e=>!e.taskId).length}</span></button><button data-page="customers" class="${page==='customers'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg> <span>Customers</span></button><button data-page="workload" class="${page==='workload'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/></svg> <span>Team workload</span></button><label>TEAM QUEUES</label>${TEAMS.map(t=>`<button data-team="${esc(t)}" class="${team===t&&page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="4"/></svg> <span>${esc(t)}</span><span class="count">${active.filter(x=>x.team===t).length}</span></button>`).join('')}<label>WORKSPACE</label><button data-page="groups" class="${page==='groups'?'active':''}">＋ <span>Groups & people</span></button><button data-page="settings" class="${page==='settings'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="white"/><circle cx="16" cy="17" r="3" fill="white"/></svg> <span>Connections & data</span></button></nav><footer><span class="avatar">IA</span> ${esc(cloud.user?.email||'Ignacio')}<br><span>Keep every handoff visible.</span></footer></aside><main class="main"><div class="content"><div class="eyebrow">N10 / OPERATIONS</div><div class="heading"><div><h1>${({today:'Today',workspace:team==='All teams'?'Operations inbox':team+' space',inbox:'Email inbox',customers:'Customers',workload:'Team workload',settings:'Workspace settings',groups:'Team & groups'})[page]}</h1><p class="muted">${({today:'New replies, deadlines, and follow-ups.',workspace:'',inbox:'',customers:'',workload:'Spot overloaded queues and rebalance the work.',settings:'Manage local data and plan your live connections.',groups:'Create your groups. Bring in your people. Give every request a home.'})[page]}</p></div><div class="actions">${page==='groups'?'<button id="new-group">New group</button><button id="new-person">Add assignee</button><button id="team-access" class="primary">Team access</button>':''}${page==='inbox'&&!mailReading?'<button id="email-connections">Connections</button><button id="capture">Capture email</button><button id="inbox-sync" class="primary">Sync inbox</button>':''}${['groups','inbox','customers'].includes(page)?'':'<button class="primary" id="new-task">＋ New task</button>'}</div></div>${page==='workspace'?`${composerHTML()}<div class="toolbar"><div class="segments">${['Focus','Board','List','Do next'].map(v=>`<button data-view="${v}" class="${view===v?'active':''}">${v==='Board'?'▦':v==='List'?'☷':'↗'} ${v}</button>`).join('')}</div><button id="workspace-filter-toggle" aria-label="Filters" aria-expanded="${filtersOpen}" aria-controls="workspace-filters" title="Filters"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4"/></svg></button></div><div id="workspace-filters" class="workspace-filters" ${filtersOpen?'':'hidden'}>${planningBar()}<div class="filters"><select id="team" aria-label="Filter by team">${options(['All teams',...TEAMS],team)}</select><select id="owner" aria-label="Filter by owner">${options(['All owners',...USERS],owner)}</select><select id="customer-filter" aria-label="Filter by customer"><option value="">All customers</option>${options([...new Set([...state.shipments.map(s=>s.customer),...state.tasks.map(taskCustomer)].filter(Boolean))].sort(),customerFilter)}</select><select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option>${options(STATUSES,statusFilter)}</select><input type="date" id="due-filter" aria-label="Filter by due date" title="Filter by due date" value="${esc(dueFilter)}"><select id="work-queue" aria-label="Filter by work queue"><option value="">All work</option>${options(Object.keys(workQueues),workQueue)}</select><button id="ftz-filter" class="small ${ftzOnly?'primary':''}" aria-pressed="${ftzOnly}">FTZ only</button><button id="customize-ftz" class="small">Task templates</button><button id="clear" class="small">Clear filters</button></div></div><div id="task-results">${taskResults()}</div><div class="bottom-note">${attention?'Showing overdue, unassigned, and follow-up-due tasks. ':''}${cloud.workspace?'Shared with your workspace. Team filters are views, not access permissions.':'Local demo: changes stay in this browser. Sign in to use shared data.'}</div>`:page==='today'?todayHTML():page==='inbox'?inboxHTML():page==='customers'?customerDirectoryHTML():page==='workload'?workloadHTML():page==='groups'?groupsHTML():settingsHTML()}</div></main><nav class="glass-dock" aria-label="Quick navigation">${[['today','Today'],['workspace','Board'],['inbox','Inbox'],['customers','Customers'],['groups','Team']].map(([key,label])=>`<button data-page="${key}" class="${page===key?'active':''}">${label}</button>`).join('')}<button id="dock-add" aria-label="Create task">＋</button></nav></div>`;
  $('#team-access')?.addEventListener('click',()=>cloud.workspace?accountDialog():toast('Sign in to manage workspace access.'));
- $('#account-access').onclick=()=>cloud.workspace?accountDialog():location.reload();document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;if(page==='inbox'){mailReading=false;mailSelecting=false;selectedThreads.clear();}if(page==='workspace'){team='All teams';owner='All owners';query='';operationFilter='';attention=false;}render();window.scrollTo({top:0,behavior:'instant'});});document.querySelectorAll('[data-team]').forEach(b=>b.onclick=()=>{team=b.dataset.team;page='workspace';attention=false;render();});
- $('#search').oninput=e=>{query=e.target.value;if(page==='shipments'){const caret=e.target.selectionStart;render();$('#search').focus();$('#search').setSelectionRange(caret,caret);}else if(page!=='workspace'){page='workspace';render();$('#search').focus();}else{$('#task-results').innerHTML=taskResults();bindCards();bindPage();bindDirectory();bindPlanning();}};
+ $('#account-access').onclick=()=>cloud.workspace?accountDialog():location.reload();document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;if(page==='customers')query='';if(page==='inbox'){mailReading=false;mailSelecting=false;selectedThreads.clear();}if(page==='workspace'){team='All teams';owner='All owners';query='';operationFilter='';attention=false;}render();window.scrollTo({top:0,behavior:'instant'});});document.querySelectorAll('[data-team]').forEach(b=>b.onclick=()=>{team=b.dataset.team;page='workspace';attention=false;render();});
+ $('#search').oninput=e=>{query=e.target.value;if(page==='customers'){const search=$('#customer-directory-search');search.value=query;search.dispatchEvent(new Event('input'));}else if(page!=='workspace'){page='workspace';render();$('#search').focus();}else{$('#task-results').innerHTML=taskResults();bindCards();bindPage();bindDirectory();bindPlanning();}};
+ if(page==='customers')bindCustomerDirectory($('.content'));
  $('#new-task')?.addEventListener('click',()=>focusComposer());$('#new-shipment')?.addEventListener('click',()=>shipmentEditor());$('#capture')?.addEventListener('click',captureEmail);$('#new-group')?.addEventListener('click',()=>groupEditor());$('#new-person')?.addEventListener('click',()=>personEditor());
  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render();});$('#team')?.addEventListener('change',e=>{team=e.target.value;render();});$('#owner')?.addEventListener('change',e=>{owner=e.target.value;render();});$('#attention')?.addEventListener('click',()=>{attention=!attention;view='Do next';render();});$('#clear')?.addEventListener('click',()=>{team='All teams';owner='All owners';query='';customerFilter=statusFilter=dueFilter=workQueue=typeFilter=priorityFilter=operationFilter='';scope='All tasks';groupBy='None';selectedTasks.clear();ftzOnly=false;attention=false;render();});
- $('#workspace-filters')?.addEventListener('toggle',event=>{if(event.target.isConnected)filtersOpen=event.target.open;});
+ $('#workspace-filter-toggle')?.addEventListener('click',event=>{filtersOpen=!filtersOpen;$('#workspace-filters').hidden=!filtersOpen;event.currentTarget.setAttribute('aria-expanded',String(filtersOpen));});
  $('#customize-ftz')?.addEventListener('click',()=>editFtzTemplates());
  $('#work-queue')?.addEventListener('change',e=>{
   workQueue=e.target.value;attention=false;
@@ -105,6 +107,7 @@ $('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass
  const composer=$('#inline-capture');
  if(composer&&captureDraft?.context===composer.dataset.context){
   composer.elements.title.value=captureDraft.title;
+  setCustomerChoice(composer,captureDraft.customer);
   composer.elements.workflow.value=captureDraft.workflow;
   composer.elements.workflow.onchange();
   composer.querySelectorAll('[name=workflowStep]').forEach((input,index)=>{input.checked=captureDraft.steps[index]??true;});
@@ -148,7 +151,12 @@ openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutto
  $('#edit-task').onclick=()=>taskEditor(id);
  $('#delete-task')?.addEventListener('click',()=>confirmTaskDeletion([id]));
  const properties=$('#inline-properties');
- for(const control of properties.querySelectorAll('input,select,textarea')){
+ bindCustomerPicker(properties,clientId=>{
+  t.clientId=clientId;t.customer='';
+  activity(t,clientId?'Updated customer':'Removed customer');
+  save();render();taskDetail(id);
+ });
+ for(const control of properties.querySelectorAll('[data-task-field] input,[data-task-field] select,[data-task-field] textarea')){
   control.onblur=()=>{
    control.closest('[data-task-field]').hidden=true;
    properties.querySelector('[data-property='+control.name+']').hidden=false;
@@ -171,6 +179,9 @@ openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutto
     const property=text.parentElement.dataset.property;
     text.textContent=updated.content.querySelector('[data-property='+property+'] strong').textContent;
    }
+   for(const picker of properties.querySelectorAll('[data-add-property]')){
+    picker.innerHTML=updated.content.querySelector('[data-add-property='+picker.dataset.addProperty+']').innerHTML;
+   }
    for(const node of properties.querySelectorAll('[data-task-section] > summary,.task-reference-line')){
     const selector=node.parentElement.matches('[data-task-section]')?'[data-task-section='+node.parentElement.dataset.taskSection+'] > summary':'.task-reference-line';
     node.textContent=updated.content.querySelector(selector)?.textContent||'';
@@ -184,7 +195,9 @@ openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutto
   const selected=field.closest('[data-task-field]');
   for(const editor of properties.querySelectorAll('[data-task-field]'))editor.hidden=editor!==selected;
   for(const chip of properties.querySelectorAll('[data-property]'))chip.hidden=chip.dataset.property===key;
-  const section=selected.closest('details');
+  const optional=selected.closest('[data-optional]');
+  if(optional)optional.hidden=false;
+  const section=selected.closest('details.task-section');
   if(section)section.open=true;
   field.focus();
  };
@@ -193,6 +206,7 @@ openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutto
   if(event.key!=='Enter'||event.target.tagName!=='INPUT')return;
   event.preventDefault();event.target.blur();
  };
+ properties.querySelectorAll('[data-add-property]').forEach(picker=>picker.onchange=()=>{if(picker.value)showProperty(picker.value);picker.value='';});
  if(focus)showProperty(focus);
 
 const updateReminder=value=>{
@@ -258,7 +272,7 @@ function inboxHTML(){
  const tasks=state.tasks.filter(t=>thread?.taskIds.includes(t.id));
  const reviewTasks=thread?emailUpdateCandidates(thread):[];
  const toolbar=`<div class="inbox-toolbar">
-  <input type="search" id="mail-search" aria-label="Search email" placeholder="Search sender, subject, or message" value="${esc(mailQuery)}">
+  <input type="search" id="mail-search" aria-label="Search email" placeholder="Search email" value="${esc(mailQuery)}">
   <select id="mail-folder" aria-label="Mailbox folder">${options(['Inbox','Unlinked','Linked','Archived','Trash'],inboxFilter)}</select><button id="mail-select-mode" aria-pressed="${mailSelecting}">${mailSelecting?'Cancel':'Select'}</button>
   <span id="inbox-sync-state" class="muted" role="status"></span>
  </div>`;
@@ -498,6 +512,7 @@ function composerHTML(email){
    ${workflowPicker(true)}
    <button class="primary" type="submit">Add task</button>
   </div>
+  ${customerPicker('',{composer:true})}
   ${email&&mailActionDraft?composerSuggestions(mailActionDraft):''}
   ${!email&&captureStatus!=='Up next'?`<small class="capture-destination">Adding to ${esc(captureStatus)}</small>`:''}
  </form>`;
@@ -511,6 +526,7 @@ function focusComposer(status='Up next'){
 function bindComposer(email){
  const form=$('#inline-capture');
  bindWorkflow(form);
+ bindCustomerPicker(form,()=>{});
  form.onsubmit=event=>{
   event.preventDefault();
   const data=new FormData(form),title=data.get('title').trim(),steps=data.getAll('workflowStep');
@@ -526,10 +542,11 @@ function bindComposer(email){
    if(state.tasks.some(item=>item.requestKey===draft.requestKey))return toast('This request already has a task.');
    task.requestKey=draft.requestKey;
   }
+  if(form.elements.customerChoice.value){task.clientId=form.elements.customerChoice.value;task.customer='';}
   state.tasks.push(task);addWorkflowSteps(task,steps);
   if(email){addMailLink(email,task.id);captureEmailId='';mailActionDraft=null;}
   else captureStatus='Up next';
-  form.reset();form.elements.workflow.onchange();
+  form.reset();setCustomerChoice(form,'');form.elements.workflow.onchange();
   save();render();
   if(email)taskDetail(task.id);
   else $('#inline-capture input')?.focus();
@@ -546,11 +563,13 @@ function taskProperties(task){
   </button><label class="field" data-task-field hidden><span class="visually-hidden">${label}</span>${control}</label></div>`;
  };
  const section=(key,title,body)=>`<details class="quick-more task-section" data-task-section="${key}"><summary>${esc(title)}</summary>${body}</details>`;
+ const optional=(key,label,value,settings)=>`<div data-optional="${key}" ${value?'':'hidden'}>${field(key,label,value,settings)}</div>`;
+ const more=(group,fields)=>`<select class="add-task-property" data-add-property="${group}" aria-label="Add ${group} detail"><option value="">＋ Add ${group} detail</option>${fields}</select>`;
  const due=task.due||'';
- const context=[taskCustomer(task),...new Set(taskReferences(task))].filter(Boolean).join(' · ');
  return `<div id="inline-properties" class="task-summary">
   ${field('title','Task title',task.title,{style:'task-title-value'})}
-  <p class="muted task-reference-line" ${context?'':'hidden'}>${esc(context)}</p>
+  ${customerPicker(task.clientId,{label:taskCustomer(task)})}
+  <p class="muted task-reference-line" ${taskReferences(task).length?'':'hidden'}>${esc([...new Set(taskReferences(task))].join(' · '))}</p>
   ${field('nextAction','Next action',task.nextAction,{display:nextAction(task),style:'task-next-value'})}
   <div class="task-summary-pair">
    ${field('status','Status',task.status,{choices:options(STATUSES,task.status)})}
@@ -564,16 +583,19 @@ function taskProperties(task){
   ].join(''))}
   ${section('details','Task details',[
    field('team','Department',task.team,{choices:options(TEAMS,task.team)}),
-   field('taskType','Type',task.taskType,{choices:options(['',...state.taskTypes],task.taskType||'')}),
+   optional('taskType','Type',task.taskType,{choices:options(['',...state.taskTypes],task.taskType||'')}),
    field('priority','Priority',task.priority,{display:task.priority+(task.priorityOverride?' · Manual':''),choices:options(priorities,task.priority)}),
-   field('description','Instructions',task.description,{type:'textarea'}),
-   field('consequence','Consequence',task.consequence),
-   field('clientId','Client',task.clientId,{display:state.clients.find(c=>c.id===task.clientId)?.name,choices:clientOptions(task.clientId)}),
-   field('shipmentId','Operation',task.shipmentId,{display:shipment(task.shipmentId)?.reference,choices:operationOptions(task.shipmentId)}),
-   field('customer','Customer name',task.customer,{display:taskCustomer(task)}),
-   field('ourReference','Internal reference',task.ourReference),
-   field('customerReference','Customer reference',task.customerReference),
-   field('ftzReference','FTZ reference',task.ftzReference)
+   optional('description','Instructions',task.description,{type:'textarea'}),
+   optional('consequence','Consequence',task.consequence),
+   optional('shipmentId','Operation',task.shipmentId,{display:shipment(task.shipmentId)?.reference,choices:operationOptions(task.shipmentId)}),
+   optional('ourReference','Internal reference',task.ourReference),
+   optional('customerReference','Customer reference',task.customerReference),
+   optional('ftzReference','FTZ reference',task.ftzReference)
+   ,more('task',[
+    ['taskType','Type',task.taskType],['description','Instructions',task.description],['consequence','Consequence',task.consequence],
+    ['shipmentId','Operation',task.shipmentId],['ourReference','Internal reference',task.ourReference],
+    ['customerReference','Customer reference',task.customerReference],['ftzReference','FTZ reference',task.ftzReference]
+   ].filter(([, ,value])=>!value).map(([key,label])=>`<option value="${key}">${label}</option>`).join(''))
   ].join(''))}
  </div>`;
 }
@@ -742,7 +764,7 @@ function planningBar(){
   <select id="operation-filter" aria-label="Operation">${operationOptions(operationFilter)}</select>
   <select id="saved-view" aria-label="Saved views"><option value="">Saved views</option>${options(Object.keys(saved),'')}</select>
   <button id="save-view">Save view</button>${Object.keys(saved).length?'<button id="manage-views">Manage views</button>':''}<button id="manage-types">Task types</button>
-  <button id="manage-clients">Clients</button>
+  <button id="manage-clients">Customers</button>
  </div>`;
 }
 function groupLabel(task){
@@ -863,39 +885,111 @@ function typeDirectory(){
  document.querySelectorAll('[data-type-name]').forEach(input=>input.onchange=()=>{if(input.value.trim())update(input.value,+input.dataset.typeName);});
  document.querySelectorAll('[data-delete-type]').forEach(button=>button.onclick=()=>update('',+button.dataset.deleteType));
 }
-function clientDirectory(){
- openDialog('Clients',`<input type="search" id="client-search" placeholder="Find a client" aria-label="Find a client">
-  <div id="client-directory">${state.clients.map(c=>`<div class="section-title client-row" data-client-name="${esc(c.name.toLowerCase())}"><button data-client-work="${esc(c.id)}">${esc(c.name)}</button><button data-edit-client="${esc(c.id)}">Edit</button></div>`).join('')}</div>`,'<button class="primary" id="new-client">New client</button>');
- $('#client-search').oninput=e=>document.querySelectorAll('[data-client-name]').forEach(row=>row.hidden=!row.dataset.clientName.includes(e.target.value.trim().toLowerCase()));
- $('#new-client').onclick=()=>clientEditor();
- document.querySelectorAll('[data-edit-client]').forEach(b=>b.onclick=()=>clientEditor(b.dataset.editClient));
- document.querySelectorAll('[data-client-work]').forEach(b=>b.onclick=()=>{
-  const client=state.clients.find(c=>c.id===b.dataset.clientWork);
-  openDialog(esc(client.name),`<div class="section-title"><h3>Operations</h3><button id="client-new-operation">New operation</button></div>${state.shipments.filter(s=>s.clientId===client.id||s.customer===client.name).map(s=>`<p><button data-open-operation="${esc(s.id)}">${esc(s.reference)}</button></p>`).join('')}<h3>Tasks</h3>${state.tasks.filter(t=>taskCustomer(t)===client.name).map(t=>`<p><button data-client-task="${esc(t.id)}">${esc(t.title)}</button> ${esc(t.status)}</p>`).join('')}`);
-  $('#client-new-operation').onclick=()=>shipmentEditor(null,client.id);
-  document.querySelectorAll('[data-client-task]').forEach(button=>button.onclick=()=>taskDetail(button.dataset.clientTask));
-  document.querySelectorAll('[data-open-operation]').forEach(button=>button.onclick=()=>operationDetail(button.dataset.openOperation));
- });
+function customerDirectoryHTML(){
+ return `<div class="customer-directory"><div class="customer-directory-top"><input type="search" id="customer-directory-search" placeholder="Search customers" aria-label="Search customers" value="${esc(page==='customers'?query:'')}"><button class="primary" id="new-client">＋ Add customer</button></div>
+ <div class="customer-rows">${[...state.clients].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<div class="client-row customer-record" data-client-name="${esc(c.name.toLowerCase())}"><button data-client-work="${esc(c.id)}">${esc(c.name)}</button><button data-edit-client="${esc(c.id)}" aria-label="Edit ${esc(c.name)}">⋯</button></div>`).join('')}</div>
+ <p class="muted" id="no-customers" hidden>No matching customers.</p>
+ ${state.shipments.length?`<details class="quick-more"><summary>Operation records · ${state.shipments.length}</summary>${shipmentsHTML()}</details>`:''}</div>`;
 }
-function clientEditor(id){
+function clientDirectory(){
+ openDialog('Customers',customerDirectoryHTML());
+ bindCustomerDirectory($('#detail'));
+}
+function bindCustomerDirectory(root){
+ const search=root.querySelector('#customer-directory-search');
+ const filter=()=>{
+  const text=search.value.trim().toLowerCase();
+  let matches=0;
+  for(const row of root.querySelectorAll('[data-client-name]')){
+   row.hidden=!row.dataset.clientName.includes(text);
+   if(!row.hidden)matches++;
+  }
+  root.querySelector('#no-customers').hidden=matches>0;
+ };
+ search.oninput=filter;
+ filter();
+ root.querySelector('#new-client').onclick=()=>clientEditor(undefined,search.value.trim());
+ root.querySelectorAll('[data-edit-client]').forEach(b=>b.onclick=()=>clientEditor(b.dataset.editClient));
+ root.querySelectorAll('[data-client-work]').forEach(b=>b.onclick=()=>customerDetail(b.dataset.clientWork));
+ root.querySelectorAll('[data-shipment]').forEach(b=>b.onclick=()=>operationDetail(b.dataset.shipment));
+ root.querySelectorAll('[data-customer]').forEach(b=>b.onclick=()=>customerView(b.dataset.customer));
+ root.querySelectorAll('[data-edit-shipment]').forEach(b=>b.onclick=()=>shipmentEditor(b.dataset.editShipment));
+}
+function customerDetail(id){
  const client=state.clients.find(c=>c.id===id);
- openDialog(client?'Edit client':'New client',`<div class="task-properties">
-  <label class="field">Name<input id="client-name" maxlength="120" value="${esc(client?.name)}"></label>
-  <label class="field">Email domain<input id="client-domain" maxlength="150" placeholder="example.com" value="${esc(client?.domain)}"></label>
-  <label class="field">Service commitments<input id="client-service" maxlength="240" value="${esc(client?.service)}"></label>
- </div>`,`${client?'<button class="danger" id="delete-client">Delete client</button>':''}<button class="primary" id="save-client">Save client</button>`);
+ openDialog(esc(client.name),`<div class="section-title"><h3>Operations</h3><button id="client-new-operation">New operation</button></div>${state.shipments.filter(s=>s.clientId===client.id||s.customer===client.name).map(s=>`<p><button data-open-operation="${esc(s.id)}">${esc(s.reference)}</button></p>`).join('')}<h3>Tasks</h3>${state.tasks.filter(isBoardTask).filter(t=>taskCustomer(t)===client.name).map(t=>`<p><button data-client-task="${esc(t.id)}">${esc(t.title)}</button> ${esc(t.status)}</p>`).join('')}`);
+ $('#client-new-operation').onclick=()=>shipmentEditor(null,id);
+ document.querySelectorAll('[data-client-task]').forEach(button=>button.onclick=()=>taskDetail(button.dataset.clientTask));
+ document.querySelectorAll('[data-open-operation]').forEach(button=>button.onclick=()=>operationDetail(button.dataset.openOperation));
+}
+function findCustomer(name){
+ return state.clients.find(client=>client.name.toLowerCase()===name.trim().toLowerCase());
+}
+function addCustomer(name){
+ const existing=findCustomer(name);
+ if(existing)return existing;
+ const client={id:uid(),name,domain:'',service:''};
+ state.clients.push(client);
+ return client;
+}
+function customerPicker(id,{composer=false,label=''}={}){
+ return `<details class="customer-picker"><summary><span data-picked-customer>${esc(state.clients.find(c=>c.id===id)?.name||label||'＋ Add customer')}</span></summary>
+  <input type="hidden" name="customerChoice" value="${esc(id)}"><div class="customer-picker-panel">
+  <input type="search" data-customer-query maxlength="120" aria-label="Customer name" placeholder="Type a customer name" autocomplete="off">
+  <div data-customer-matches></div>${id&&!composer?'<button type="button" data-remove-customer>Remove customer</button>':''}</div></details>`;
+}
+function setCustomerChoice(root,id){
+ const picker=root.querySelector('.customer-picker');
+ picker.querySelector('[name=customerChoice]').value=id;
+ picker.querySelector('[data-picked-customer]').textContent=state.clients.find(c=>c.id===id)?.name||'＋ Add customer';
+}
+function bindCustomerPicker(root,onSelect){
+ const picker=root.querySelector('.customer-picker');
+ const input=picker.querySelector('[data-customer-query]'),matches=picker.querySelector('[data-customer-matches]');
+ const select=id=>{setCustomerChoice(root,id);picker.open=false;onSelect(id);};
+ const createAndSelect=name=>{const client=addCustomer(name);if(root.matches('form'))save();select(client.id);};
+ const update=()=>{
+  const name=input.value.trim(),found=findCustomer(name);
+  matches.replaceChildren();
+  const add=(label,callback)=>{
+   const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=callback;matches.append(button);
+  };
+  for(const client of state.clients.filter(c=>c.name.toLowerCase().includes(name.toLowerCase())).slice(0,8))add(client.name,()=>select(client.id));
+  if(name&&!found)add('Save “'+name+'” as customer',()=>createAndSelect(name));
+ };
+ picker.ontoggle=()=>{if(picker.open){update();input.focus();}};
+ input.oninput=update;
+ input.onkeydown=event=>{
+  if(event.key!=='Enter')return;
+  event.preventDefault();
+  const name=input.value.trim();
+  if(!name)return;
+  createAndSelect(name);
+ };
+ picker.querySelector('[data-remove-customer]')?.addEventListener('click',()=>select(''));
+}
+function clientEditor(id,suggestedName=''){
+ const client=state.clients.find(c=>c.id===id);
+ openDialog(client?'Edit customer':'Add customer',`<div class="task-properties">
+  <label class="field">Name<input id="client-name" maxlength="120" value="${esc(client?.name||suggestedName.slice(0,120))}"></label>
+  <details class="quick-more"><summary>Optional details</summary><label class="field">Email domain<input id="client-domain" maxlength="150" placeholder="example.com" value="${esc(client?.domain)}"></label>
+  <label class="field">Service commitments<input id="client-service" maxlength="240" value="${esc(client?.service)}"></label></details>
+ </div>`,`${client?'<button class="danger" id="delete-client">Delete client</button>':''}<button class="primary" id="save-client">Save customer</button>`);
  $('#save-client').onclick=()=>{
   const name=$('#client-name').value.trim(),domain=$('#client-domain').value.trim().toLowerCase();
   if(!name||state.clients.some(c=>c.id!==id&&(c.name.toLowerCase()===name.toLowerCase()||(domain&&c.domain===domain))))return toast('Enter a unique name and email domain.');
   if(domain&&!/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(domain))return toast('Enter a domain such as example.com.');
   const values={name,domain,service:$('#client-service').value.trim()};
-  if(client)Object.assign(client,values);else state.clients.push({id:uid(),...values});
-  save();render();clientDirectory();
+  if(client)Object.assign(client,values);else Object.assign(addCustomer(name),values);
+  if(page==='customers')query='';
+  save();render();if(page==='customers')$('#detail').close();else clientDirectory();
  };
+ $('#client-name').onkeydown=event=>{if(event.key==='Enter')$('#save-client').click();};
+ $('#client-name').focus();
  $('#delete-client')?.addEventListener('click',()=>{
   if(!confirm('Delete this client? Its name stays on linked tasks and operations.'))return;
   for(const item of [...state.tasks,...state.shipments])if(item.clientId===id){item.customer=client.name;item.clientId='';}
-  state.clients=state.clients.filter(c=>c.id!==id);save();render();clientDirectory();
+  state.clients=state.clients.filter(c=>c.id!==id);save();render();if(page==='customers')$('#detail').close();else clientDirectory();
  });
 }
 function addMailLink(message,id){
