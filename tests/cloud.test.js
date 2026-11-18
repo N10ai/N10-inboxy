@@ -177,6 +177,8 @@ test('threaded replies reopen the operational loop in Today and can be reviewed'
  try{
   const doc=w.document;
   doc.querySelector('[data-page="inbox"]').click();
+  assert.equal(doc.querySelectorAll('.mail-row').length,0);
+  const folder=doc.querySelector('#mail-folder');folder.value='Linked';folder.dispatchEvent(new w.Event('change'));
   assert.equal(doc.querySelectorAll('.mail-row').length,1);
   assert.equal(doc.querySelectorAll('.mail-message').length,0);
   doc.querySelector('.mail-row').click();
@@ -234,9 +236,11 @@ test('Gmail conversation supports independent actions, review, assignment, compl
   const status=doc.querySelector('[data-task="'+first+'"] [data-row-field="status"]');
   status.value='Completed';status.dispatchEvent(new w.Event('change'));
   click('[data-page="inbox"]');
+  assert.equal(doc.querySelector('[data-email="mail-a"]'),null);
   click('#mail-select-mode');
+  const linked=doc.querySelector('#mail-folder');linked.value='Linked';linked.dispatchEvent(new w.Event('change'));
   click('[data-select-mail="gmail-1:thread-a"]');
-  click('[data-select-mail="gmail-1:thread-b"]');
+  click('[data-select-mail="gmail-1:thread-c"]');
   click('#bulk-mail-action');const folder=doc.querySelector('#mail-folder');folder.value='Trash';folder.dispatchEvent(new w.Event('change'));
   assert.equal(doc.querySelectorAll('.mail-row').length,2);
   await new Promise(resolve=>setTimeout(resolve,100));
@@ -274,8 +278,8 @@ test('transport template creates a checklist and task card reveals one inline ed
   task.querySelector('[name="nextAction"]').value='Call terminal';
   task.querySelector('[name="nextAction"]').dispatchEvent(new w.Event('change'));
   assert.match(task.querySelector('[data-property="nextAction"]').textContent,/Call terminal/);
-  task.querySelector('[data-property="owner"]').click();
-  assert.equal(task.querySelectorAll('[data-task-field]:not([hidden])').length,1);
+  assert.ok(task.querySelector('.task-assignment select[name="owner"]'));
+  assert.ok(task.querySelector('.task-assignment select[name="team"]'));
   await new Promise(resolve=>setTimeout(resolve,100));
   assert.equal(snapshot.tasks[0].workflow,'Drayage');
   assert.equal(snapshot.tasks[0].nextAction,'Call terminal');
@@ -295,7 +299,11 @@ test('transport template creates a checklist and task card reveals one inline ed
   handoff.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
   assert.equal(doc.querySelectorAll('#task-results [data-task]').length,2);
   await new Promise(resolve=>setTimeout(resolve,100));
-  assert.ok(snapshot.tasks.some(item=>item.parentId===parent.id&&item.team==='Warehouse'&&item.owner==='Unassigned'));
+  const warehouse=snapshot.tasks.find(item=>item.parentId===parent.id&&item.team==='Warehouse');
+  assert.equal(warehouse.owner,'Unassigned');
+  const warehouseCard=doc.querySelector('#task-results [data-task="'+warehouse.id+'"]');
+  assert.equal(warehouseCard.querySelector('h3').textContent,parent.title);
+  assert.equal(warehouseCard.querySelector('.handoff-work').textContent,'Count received pallets');
 
  }finally{dom.window.close();}
 });
@@ -353,5 +361,29 @@ test('Ocean Export checklist saves independent scheduled dates, cutoffs and note
   assert.equal(snapshot.tasks.find(task=>task.title.startsWith('Container loading')).due,'2026-11-20');
   assert.match(doc.querySelector('.checklist-items').textContent,/Send shipping instructions to carrier/);
   assert.equal(doc.querySelectorAll('#task-results [data-task]').length,1);
+ }finally{dom.window.close();}
+});
+
+test('a completed checklist step can be unchecked and reopens its completed parent',async()=>{
+ const {dom,w,snapshot}=await app(true);
+ try{
+  const doc=w.document;
+  const submit=form=>form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  const capture=doc.querySelector('#inline-capture');
+  capture.elements.title.value='AE 1052';
+  capture.elements.description.value='Send the air export documents';
+  submit(capture);
+  doc.querySelector('#task-results .card-open').click();
+  const step=doc.querySelector('#inline-subtask');
+  step.elements.title.value='Send the draft AWB';
+  submit(step);
+  doc.querySelector('[data-complete-child]').click();
+  assert.equal(doc.querySelector('[data-complete-child]').getAttribute('aria-pressed'),'true');
+  doc.querySelector('#complete-task').click();
+  doc.querySelector('[data-complete-child]').click();
+  assert.equal(doc.querySelector('[data-complete-child]').getAttribute('aria-pressed'),'false');
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.ok(snapshot.tasks.every(task=>task.status==='Up next'));
+  assert.equal(snapshot.tasks.find(task=>task.title==='AE 1052').description,'Send the air export documents');
  }finally{dom.window.close();}
 });

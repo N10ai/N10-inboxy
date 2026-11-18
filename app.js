@@ -56,7 +56,23 @@ function reminderButtons(){
 }
 function isBoardTask(task){
  const parent=state.tasks.find(item=>item.id===task.parentId);
- return !parent||task.team!==parent.team;
+ return !parent||task.delegated||task.team!==parent.team;
+}
+function handoffParent(task){
+ if(!task.parentId||!isBoardTask(task))return null;
+ let parent=state.tasks.find(record=>record.id===task.parentId);
+ while(parent?.parentId){
+  const ancestor=state.tasks.find(record=>record.id===parent.parentId);
+  if(!ancestor)break;
+  parent=ancestor;
+ }
+ return parent;
+}
+function taskHeading(task){
+ return handoffParent(task)?.title||task.title;
+}
+function assignmentPicker(key,label,choices,value){
+ return `<label class="task-assignment"><small>${label}</small><select name="${key}" aria-label="${label}">${options(choices,value)}</select></label>`;
 }
 function filtered(){
  const now=Date.now(),search=query.trim().toLowerCase(),subjects=new Map();
@@ -72,7 +88,7 @@ function filtered(){
  &&(!workQueue||(t.status!=='Completed'&&workQueues[workQueue](t,now)))
  &&(!customerFilter||taskCustomer(t)===customerFilter)
  &&(!statusFilter||t.status===statusFilter)
- &&(!dueFilter||[t.cutoff,t.due].some(date=>date?.slice(0,10)===dueFilter))&&(!search||[t.title,t.nextAction,t.description,t.workflow,taskCustomer(t),...taskReferences(t),...checklist(t.id).filter(step=>!isBoardTask(step)).map(step=>step.title),...(subjects.get(t.id)||[])].join(' ').toLowerCase().includes(search))&&(!attention||priority(t,state.tasks).reasons.some(r=>['Overdue','Follow-up due','Needs owner'].includes(r)))).sort((a,b)=>priority(b,state.tasks,now).score-priority(a,state.tasks,now).score||(dueTime(deadline(a))-dueTime(deadline(b))));}
+ &&(!dueFilter||[t.cutoff,t.due].some(date=>date?.slice(0,10)===dueFilter))&&(!search||[taskHeading(t),t.title,t.nextAction,t.description,t.workflow,taskCustomer(t),...taskReferences(t),...checklist(t.id).filter(step=>!isBoardTask(step)).map(step=>step.title),...(subjects.get(t.id)||[])].join(' ').toLowerCase().includes(search))&&(!attention||priority(t,state.tasks).reasons.some(r=>['Overdue','Follow-up due','Needs owner'].includes(r)))).sort((a,b)=>priority(b,state.tasks,now).score-priority(a,state.tasks,now).score||(dueTime(deadline(a))-dueTime(deadline(b))));}
 function render(){
 const currentComposer=$('#inline-capture');
 const captureDraft=currentComposer&&{
@@ -80,10 +96,12 @@ const captureDraft=currentComposer&&{
  title:currentComposer.elements.title.value,
  workflow:currentComposer.elements.workflow.value,
  customer:currentComposer.elements.customerChoice.value,
+ description:currentComposer.elements.description.value,
+ descriptionOpen:currentComposer.querySelector('.capture-description').open,
  steps:[...currentComposer.querySelectorAll('[name=workflowStep]')].map(input=>input.checked),
 };
 const active=state.tasks.filter(t=>isBoardTask(t)&&t.status!=='Completed');
-$('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass-welcome"><span class="avatar">N10</span><span>Welcome to <strong>Inboxy</strong><small>Your operations, connected.</small></span></div><input class="search" id="search" aria-label="Search tasks, customers, references" placeholder="Search tasks, customers, references…" value="${esc(query)}"><div class="topbar-right"><span class="demo" data-cloud-status>${cloud.workspace?(cloud.failed?'Not saved · export before reload':cloud.pending?'Saving…':'Shared workspace'):'Local demo'}</span><button id="account-access" class="small">${cloud.workspace?'Account':'Sign in'}</button><span class="avatar">IA</span></div></header><aside class="sidebar"><div class="logo">inboxy<b>↗</b><small>OPERATIONS, CONNECTED</small></div><div class="workspace">${esc(cloud.workspace?.name||'N10 Logistics')} <span>${cloud.workspace?'Shared operations workspace':'Operations workspace · Demo'}</span></div><nav class="nav" aria-label="Workspace"><button data-page="today" class="${page==='today'?'active':''}"><span>Today</span></button><button data-page="workspace" class="${page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 3v18M15 3v18"/></svg> <span>Workspace</span><span class="count">${active.length}</span></button><button data-page="inbox" class="${page==='inbox'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/></svg> <span>Email inbox</span><span class="count">${state.emails.filter(e=>!e.taskId).length}</span></button><button data-page="customers" class="${page==='customers'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg> <span>Customers</span></button><button data-page="workload" class="${page==='workload'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/></svg> <span>Team workload</span></button><label>TEAM QUEUES</label>${TEAMS.map(t=>`<button data-team="${esc(t)}" class="${team===t&&page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="4"/></svg> <span>${esc(t)}</span><span class="count">${active.filter(x=>x.team===t).length}</span></button>`).join('')}<label>WORKSPACE</label><button data-page="groups" class="${page==='groups'?'active':''}">＋ <span>Groups & people</span></button><button data-page="settings" class="${page==='settings'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="white"/><circle cx="16" cy="17" r="3" fill="white"/></svg> <span>Connections & data</span></button></nav><footer><span class="avatar">IA</span> ${esc(cloud.user?.email||'Ignacio')}<br><span>Keep every handoff visible.</span></footer></aside><main class="main"><div class="content"><div class="eyebrow">N10 / OPERATIONS</div><div class="heading"><div><h1>${({today:'Today',workspace:team==='All teams'?'Operations inbox':team+' space',inbox:'Email inbox',customers:'Customers',workload:'Team workload',settings:'Workspace settings',groups:'Team & groups'})[page]}</h1><p class="muted">${({today:'New replies, deadlines, and follow-ups.',workspace:'',inbox:'',customers:'',workload:'Spot overloaded queues and rebalance the work.',settings:'Manage local data and plan your live connections.',groups:'Create your groups. Bring in your people. Give every request a home.'})[page]}</p></div><div class="actions">${page==='groups'?'<button id="new-group">New group</button><button id="new-person">Add assignee</button><button id="team-access" class="primary">Team access</button>':''}${page==='inbox'&&!mailReading?'<button id="email-connections">Connections</button><button id="capture">Capture email</button><button id="inbox-sync" class="primary">Sync inbox</button>':''}${['groups','inbox','customers'].includes(page)?'':'<button class="primary" id="new-task">＋ New task</button>'}</div></div>${page==='workspace'?`${composerHTML()}<div class="toolbar"><div class="segments">${['Focus','Board','List','Do next'].map(v=>`<button data-view="${v}" class="${view===v?'active':''}">${v==='Board'?'▦':v==='List'?'☷':'↗'} ${v}</button>`).join('')}</div><button id="workspace-filter-toggle" aria-label="Filters" aria-expanded="${filtersOpen}" aria-controls="workspace-filters" title="Filters"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4"/></svg></button></div><div id="workspace-filters" class="workspace-filters" ${filtersOpen?'':'hidden'}>${planningBar()}<div class="filters"><select id="team" aria-label="Filter by team">${options(['All teams',...TEAMS],team)}</select><select id="owner" aria-label="Filter by owner">${options(['All owners',...USERS],owner)}</select><select id="customer-filter" aria-label="Filter by customer"><option value="">All customers</option>${options([...new Set([...state.shipments.map(s=>s.customer),...state.tasks.map(taskCustomer)].filter(Boolean))].sort(),customerFilter)}</select><select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option>${options(STATUSES,statusFilter)}</select><input type="date" id="due-filter" aria-label="Filter by due date" title="Filter by due date" value="${esc(dueFilter)}"><select id="work-queue" aria-label="Filter by work queue"><option value="">All work</option>${options(Object.keys(workQueues),workQueue)}</select><button id="ftz-filter" class="small ${ftzOnly?'primary':''}" aria-pressed="${ftzOnly}">FTZ only</button><button id="customize-ftz" class="small">Task templates</button><button id="clear" class="small">Clear filters</button></div></div><div id="task-results">${taskResults()}</div><div class="bottom-note">${attention?'Showing overdue, unassigned, and follow-up-due tasks. ':''}${cloud.workspace?'Shared with your workspace. Team filters are views, not access permissions.':'Local demo: changes stay in this browser. Sign in to use shared data.'}</div>`:page==='today'?todayHTML():page==='inbox'?inboxHTML():page==='customers'?customerDirectoryHTML():page==='workload'?workloadHTML():page==='groups'?groupsHTML():settingsHTML()}</div></main><nav class="glass-dock" aria-label="Quick navigation">${[['today','Today'],['workspace','Board'],['inbox','Inbox'],['customers','Customers'],['groups','Team']].map(([key,label])=>`<button data-page="${key}" class="${page===key?'active':''}">${label}</button>`).join('')}<button id="dock-add" aria-label="Create task">＋</button></nav></div>`;
+$('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass-welcome"><span class="avatar">N10</span><span>Welcome to <strong>Inboxy</strong><small>Your operations, connected.</small></span></div><input class="search" id="search" aria-label="Search tasks, customers, references" placeholder="Search tasks, customers, references…" value="${esc(query)}"><div class="topbar-right"><span class="demo" data-cloud-status>${cloud.workspace?(cloud.failed?'Not saved · export before reload':cloud.pending?'Saving…':'Shared workspace'):'Local demo'}</span><button id="account-access" class="small">${cloud.workspace?'Account':'Sign in'}</button><span class="avatar">IA</span></div></header><aside class="sidebar"><div class="logo">inboxy<b>↗</b><small>OPERATIONS, CONNECTED</small></div><div class="workspace">${esc(cloud.workspace?.name||'N10 Logistics')} <span>${cloud.workspace?'Shared operations workspace':'Operations workspace · Demo'}</span></div><nav class="nav" aria-label="Workspace"><button data-page="today" class="${page==='today'?'active':''}"><span>Today</span></button><button data-page="workspace" class="${page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 3v18M15 3v18"/></svg> <span>Workspace</span><span class="count">${active.length}</span></button><button data-page="inbox" class="${page==='inbox'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/></svg> <span>Email inbox</span><span class="count">${inboxCount()}</span></button><button data-page="customers" class="${page==='customers'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg> <span>Customers</span></button><button data-page="workload" class="${page==='workload'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/></svg> <span>Team workload</span></button><label>TEAM QUEUES</label>${TEAMS.map(t=>`<button data-team="${esc(t)}" class="${team===t&&page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="4"/></svg> <span>${esc(t)}</span><span class="count">${active.filter(x=>x.team===t).length}</span></button>`).join('')}<label>WORKSPACE</label><button data-page="groups" class="${page==='groups'?'active':''}">＋ <span>Groups & people</span></button><button data-page="settings" class="${page==='settings'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="white"/><circle cx="16" cy="17" r="3" fill="white"/></svg> <span>Connections & data</span></button></nav><footer><span class="avatar">IA</span> ${esc(cloud.user?.email||'Ignacio')}<br><span>Keep every handoff visible.</span></footer></aside><main class="main"><div class="content"><div class="eyebrow">N10 / OPERATIONS</div><div class="heading"><div><h1>${({today:'Today',workspace:team==='All teams'?'Operations inbox':team+' space',inbox:'Email inbox',customers:'Customers',workload:'Team workload',settings:'Workspace settings',groups:'Team & groups'})[page]}</h1><p class="muted">${({today:'New replies, deadlines, and follow-ups.',workspace:'',inbox:'',customers:'',workload:'Spot overloaded queues and rebalance the work.',settings:'Manage local data and plan your live connections.',groups:'Create your groups. Bring in your people. Give every request a home.'})[page]}</p></div><div class="actions">${page==='groups'?'<button id="new-group">New group</button><button id="new-person">Add assignee</button><button id="team-access" class="primary">Team access</button>':''}${page==='inbox'&&!mailReading?'<button id="email-connections">Connections</button><button id="capture">Capture email</button><button id="inbox-sync" class="primary">Sync inbox</button>':''}${['groups','inbox','customers'].includes(page)?'':'<button class="primary" id="new-task">＋ New task</button>'}</div></div>${page==='workspace'?`${composerHTML()}<div class="toolbar"><div class="segments">${['Focus','Board','List','Do next'].map(v=>`<button data-view="${v}" class="${view===v?'active':''}">${v==='Board'?'▦':v==='List'?'☷':'↗'} ${v}</button>`).join('')}</div><button id="workspace-filter-toggle" aria-label="Filters" aria-expanded="${filtersOpen}" aria-controls="workspace-filters" title="Filters"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M7 12h10m-7 6h4"/></svg></button></div><div id="workspace-filters" class="workspace-filters" ${filtersOpen?'':'hidden'}>${planningBar()}<div class="filters"><select id="team" aria-label="Filter by team">${options(['All teams',...TEAMS],team)}</select><select id="owner" aria-label="Filter by owner">${options(['All owners',...USERS],owner)}</select><select id="customer-filter" aria-label="Filter by customer"><option value="">All customers</option>${options([...new Set([...state.shipments.map(s=>s.customer),...state.tasks.map(taskCustomer)].filter(Boolean))].sort(),customerFilter)}</select><select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option>${options(STATUSES,statusFilter)}</select><input type="date" id="due-filter" aria-label="Filter by due date" title="Filter by due date" value="${esc(dueFilter)}"><select id="work-queue" aria-label="Filter by work queue"><option value="">All work</option>${options(Object.keys(workQueues),workQueue)}</select><button id="ftz-filter" class="small ${ftzOnly?'primary':''}" aria-pressed="${ftzOnly}">FTZ only</button><button id="customize-ftz" class="small">Task templates</button><button id="clear" class="small">Clear filters</button></div></div><div id="task-results">${taskResults()}</div><div class="bottom-note">${attention?'Showing overdue, unassigned, and follow-up-due tasks. ':''}${cloud.workspace?'Shared with your workspace. Team filters are views, not access permissions.':'Local demo: changes stay in this browser. Sign in to use shared data.'}</div>`:page==='today'?todayHTML():page==='inbox'?inboxHTML():page==='customers'?customerDirectoryHTML():page==='workload'?workloadHTML():page==='groups'?groupsHTML():settingsHTML()}</div></main><nav class="glass-dock" aria-label="Quick navigation">${[['today','Today'],['workspace','Board'],['inbox','Inbox'],['customers','Customers'],['groups','Team']].map(([key,label])=>`<button data-page="${key}" class="${page===key?'active':''}">${label}</button>`).join('')}<button id="dock-add" aria-label="Create task">＋</button></nav></div>`;
  $('#team-access')?.addEventListener('click',()=>cloud.workspace?accountDialog():toast('Sign in to manage workspace access.'));
  $('#account-access').onclick=()=>cloud.workspace?accountDialog():location.reload();document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;if(page==='customers')query='';if(page==='inbox'){mailReading=false;mailSelecting=false;selectedThreads.clear();}if(page==='workspace'){team='All teams';owner='All owners';query='';operationFilter='';attention=false;}render();window.scrollTo({top:0,behavior:'instant'});});document.querySelectorAll('[data-team]').forEach(b=>b.onclick=()=>{team=b.dataset.team;page='workspace';attention=false;render();});
  $('#search').oninput=e=>{query=e.target.value;if(page==='customers'){const search=$('#customer-directory-search');search.value=query;search.dispatchEvent(new Event('input'));}else if(page!=='workspace'){page='workspace';render();$('#search').focus();}else{$('#task-results').innerHTML=taskResults();bindCards();bindPage();bindDirectory();bindPlanning();}};
@@ -107,6 +125,8 @@ $('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass
  const composer=$('#inline-capture');
  if(composer&&captureDraft?.context===composer.dataset.context){
   composer.elements.title.value=captureDraft.title;
+  composer.elements.description.value=captureDraft.description;
+  composer.querySelector('.capture-description').open=captureDraft.descriptionOpen;
   setCustomerChoice(composer,captureDraft.customer);
   composer.elements.workflow.value=captureDraft.workflow;
   composer.elements.workflow.onchange();
@@ -120,7 +140,7 @@ function checklist(taskId){
 function nextAction(task){
  return task.nextAction || (task.status!=='Completed'&&checklist(task.id).find(step=>step.status!=='Completed')?.title);
 }
-function card(t){const blocks=blockedBy(t,state.tasks),children=state.tasks.filter(x=>x.parentId===t.id),emails=conversations().filter(thread=>thread.taskIds.includes(t.id));return `<article class="card operation-card priority-${t.priority.toLowerCase()} ${blocks.length?'has-blockers':''} ${t.status==='Completed'?'is-complete':''}" draggable="true" tabindex="0" role="group" data-task="${t.id}" aria-label="${esc(t.title)}"><div class="card-context"><span class="ref">${esc(taskReferences(t)[0]||'GENERAL REQUEST')}</span><button class="drag-handle" data-drag="${t.id}" aria-label="Drag ${esc(t.title)}" title="Drag to move or reorder" draggable="false">⠿</button></div><button class="card-open"><h3>${esc(t.title)}</h3></button><div class="customer">${esc(taskCustomer(t)||t.team)}${t.parentId?' · Subtask':''}</div><button class="next-action" data-field="nextAction" data-quick-edit="${t.id}"><span>NEXT</span><strong>${esc(nextAction(t)||'Add next action')}</strong><span>↗</span></button>${blocks.length?`<div class="blocked-line">↳ Waiting on ${esc(blocks[0].title)}${blocks.length>1?' +'+(blocks.length-1):''}</div>`:''}<div class="card-signals"><span class="badge ${t.priority}">${esc(t.priority)}${t.priorityOverride?' · Manual':''}</span>${deadline(t)&&dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'<span class="overdue-pill">Overdue</span>':''}${children.length?`<span>☑ ${children.filter(c=>c.status==='Completed').length}/${children.length}</span>`:''}${emails.length?`<button data-card-email="${t.id}">✉ ${emails.length}</button>`:''}${t.followUp?`<span title="Follow-up">↻ ${esc(fmt(t.followUp))}</span>`:''}</div><div class="card-bottom"><button class="card-owner" data-field="owner" data-quick-edit="${t.id}"><span class="avatar">${esc(initials(t.owner))}</span>${esc(t.owner)}</button><button class="card-due ${dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'overdue':''}" data-field="${t.cutoff?'cutoff':'due'}" data-quick-edit="${t.id}">${t.cutoff?'Cutoff · '+esc(fmt(t.cutoff)):t.due?esc(fmt(t.due)):'＋ Due date'}</button></div><label class="card-move"><span>Move to</span><select data-move="${t.id}" aria-label="Move ${esc(t.title)} to status">${options(STATUSES,t.status)}</select></label></article>`;}
+function card(t){const parent=handoffParent(t),blocks=blockedBy(t,state.tasks),children=state.tasks.filter(x=>x.parentId===t.id),emails=conversations().filter(thread=>thread.taskIds.includes(t.id));return `<article class="card operation-card priority-${t.priority.toLowerCase()} ${blocks.length?'has-blockers':''} ${t.status==='Completed'?'is-complete':''}" draggable="true" tabindex="0" role="group" data-task="${t.id}" aria-label="${esc(taskHeading(t))}"><div class="card-context"><span class="ref">${esc(taskReferences(t).find(ref=>ref!==taskHeading(t))||t.workflow||'GENERAL REQUEST')}</span><button class="drag-handle" data-drag="${t.id}" aria-label="Drag ${esc(taskHeading(t))}" title="Drag to move or reorder" draggable="false">⠿</button></div><button class="card-open"><h3>${esc(taskHeading(t))}</h3></button><div class="customer">${taskCustomer(t)?esc(taskCustomer(t))+' · ':''}<button class="group-chip" data-quick-edit="${esc(t.id)}" data-field="team">${esc(t.team)}</button>${parent?' · Handoff':''}</div>${parent?`<p class="handoff-work">${esc(t.title)}</p>`:t.description?`<p class="handoff-work board-description">${esc(t.description)}</p>`:''}<button class="next-action" data-field="nextAction" data-quick-edit="${t.id}"><span>NEXT</span><strong>${esc(nextAction(t)||'Add next action')}</strong><span>↗</span></button>${blocks.length?`<div class="blocked-line">↳ Waiting on ${esc(blocks[0].title)}${blocks.length>1?' +'+(blocks.length-1):''}</div>`:''}<div class="card-signals"><span class="badge ${t.priority}">${esc(t.priority)}${t.priorityOverride?' · Manual':''}</span>${deadline(t)&&dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'<span class="overdue-pill">Overdue</span>':''}${children.length?`<span>☑ ${children.filter(c=>c.status==='Completed').length}/${children.length}</span>`:''}${emails.length?`<button data-card-email="${t.id}">✉ ${emails.length}</button>`:''}${t.followUp?`<span title="Follow-up">↻ ${esc(fmt(t.followUp))}</span>`:''}</div><div class="card-bottom"><button class="card-owner" data-field="owner" data-quick-edit="${t.id}"><span class="avatar">${esc(initials(t.owner))}</span>${esc(t.owner)}</button><button class="card-due ${dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'overdue':''}" data-field="${t.cutoff?'cutoff':'due'}" data-quick-edit="${t.id}">${t.cutoff?'Cutoff · '+esc(fmt(t.cutoff)):t.due?esc(fmt(t.due)):'＋ Due date'}</button></div><label class="card-move"><span>Move to</span><select data-move="${t.id}" aria-label="Move ${esc(taskHeading(t))} to status">${options(STATUSES,t.status)}</select></label></article>`;}
 function taskResults(){const list=filtered();if(view==='List'||view==='Do next')return taskTable(view==='Do next'?list.filter(t=>t.status!=='Completed'):list);if(!list.length&&view!=='Board')return '<div class="panel empty">No tasks match these filters.</div>';if(view==='Focus')return focusHTML(list);if(view==='Board')return `<div class="board-guidance"><span>Drag cards between columns. Drag the grip to move on touch screens.</span><span>Or use “Move to” on any card.</span></div><div class="board">${STATUSES.map(status=>`<section class="column" data-status="${status}" aria-label="${status} column"><div class="column-head"><i class="dot"></i>${status}<span class="number">${list.filter(t=>t.status===status).length}</span><button class="column-add" data-add-status="${status}" aria-label="Add task to ${status}">＋</button></div><div class="column-cards">${list.filter(t=>t.status===status).sort((a,b)=>(a.boardOrder??state.tasks.indexOf(a))-(b.boardOrder??state.tasks.indexOf(b))).map(card).join('')||'<div class="drop-placeholder">Drop a task here</div>'}</div><form class="column-quick-add" data-quick-status="${status}"><input name="title" required maxlength="180" aria-label="New task in ${status}" placeholder="＋ Add a task…"><button type="submit" aria-label="Create task in ${status}">↵</button></form></section>`).join('')}</div>`;return taskTable(list);}
 function bindCards(){document.querySelectorAll('[data-task]').forEach(b=>{b.onclick=e=>{if(e.target.closest('button,select,input')&&!e.target.closest('.card-open'))return;taskDetail(b.dataset.task);};b.onkeydown=e=>{if(e.target===b&&(e.key==='Enter'||e.key===' ')){e.preventDefault();taskDetail(b.dataset.task);}};});bindBoard();}
 function taskEditor(id){
@@ -147,7 +167,7 @@ function checklistItem(step,openStep){
  const late=step.status!=='Completed'&&dueTime(deadline(step))<Date.now();
  const open=step.id===openStep;
  return `<div class="checklist-item">
-  <button class="small" data-complete-child="${esc(step.id)}" aria-label="Complete ${esc(step.title)}" ${step.status==='Completed'?'disabled':''}>${step.status==='Completed'?'✓':'○'}</button>
+  <button class="small" data-complete-child="${esc(step.id)}" aria-label="${step.status==='Completed'?'Uncheck':'Complete'} ${esc(step.title)}" aria-pressed="${step.status==='Completed'}">${step.status==='Completed'?'✓':'○'}</button>
   <details class="checklist-milestone" ${open?'open':''}>
    <summary><strong>${esc(step.title)}</strong>
     ${step.due||step.cutoff?`<span class="milestone-dates ${late?'milestone-late':''}">${[step.due?'Scheduled '+fmt(step.due):'',step.cutoff?'Cutoff '+fmt(step.cutoff):''].filter(Boolean).map(esc).join(' · ')}${late?' · Overdue':''}</span>`:''}
@@ -167,8 +187,8 @@ function checklistItem(step,openStep){
   <button data-child="${esc(step.id)}" class="small" aria-label="Open ${esc(step.title)}">${isBoardTask(step)?esc(step.team)+' ↗':'↗'}</button>
  </div>`;
 }
-function taskDetail(id,focus){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),threads=conversations().filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks);
-openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}<details class="quick-more task-follow-up"><summary>${t.followUp?'Reminder · '+esc(fmt(t.followUp)):'Set reminder'}</summary>${t.status==='Completed'?'':`<div class="actions task-reminders">${reminderButtons()}<button id="custom-reminder">Pick a time</button>${t.followUp?'<button id="clear-reminder">Clear reminder</button>':''}</div>`}</details><details class="quick-more task-checklist" ${children.length?'open':''}><summary>Checklist${children.length?' · '+children.filter(x=>x.status==='Completed').length+'/'+children.length:''}</summary><div class="section-title"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Send to another group</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label></details>`}</div><div class="checklist-items">${children.map(step=>checklistItem(step,focus)).join('')}</div></details><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Notes${t.notes.length?' · '+t.notes.length:''}</summary>${t.notes.map(n=>`<div class="note">${esc(n.body)}<small>${esc(n.author)} · ${esc(fmt(n.date))}</small></div>`).join('')}<form id="note-form" class="inline-form"><textarea name="note" aria-label="Internal note" required placeholder="Add an internal note…"></textarea><button>Add note</button></form></details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`);
+function taskDetail(id,focus,openStep){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),threads=conversations().filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks);
+openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}<details class="quick-more task-follow-up"><summary>${t.followUp?'Reminder · '+esc(fmt(t.followUp)):'Set reminder'}</summary>${t.status==='Completed'?'':`<div class="actions task-reminders">${reminderButtons()}<button id="custom-reminder">Pick a time</button>${t.followUp?'<button id="clear-reminder">Clear reminder</button>':''}</div>`}</details><details class="quick-more task-checklist" ${children.length?'open':''}><summary>Checklist${children.length?' · '+children.filter(x=>x.status==='Completed').length+'/'+children.length:''}</summary><div class="section-title"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Assign this step</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label><label class="field">Member<select name="step-owner" form="inline-subtask"><option value="">Default assignment</option>${options(USERS,'')}</select></label></details>`}</div><div class="checklist-items">${children.map(step=>checklistItem(step,openStep)).join('')}</div></details><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Notes${t.notes.length?' · '+t.notes.length:''}</summary>${t.notes.map(n=>`<div class="note">${esc(n.body)}<small>${esc(n.author)} · ${esc(fmt(n.date))}</small></div>`).join('')}<form id="note-form" class="inline-form"><textarea name="note" aria-label="Internal note" required placeholder="Add an internal note…"></textarea><button>Add note</button></form></details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`);
  bindAttachments();
  document.querySelectorAll('[data-milestone]').forEach(form=>form.onsubmit=event=>{
   event.preventDefault();
@@ -183,7 +203,7 @@ openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutto
    activity(step,'Updated dates and notes');
    save();render();
   }
-  taskDetail(id,step.id);
+  taskDetail(id,undefined,step.id);
   toast('Step saved');
  });
  document.querySelectorAll('[data-source-email]').forEach(button=>button.onclick=()=>openInboxMessage(button.dataset.sourceEmail));
@@ -196,9 +216,11 @@ openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutto
   activity(t,clientId?'Updated customer':'Removed customer');
   save();render();taskDetail(id);
  });
- for(const control of properties.querySelectorAll('[data-task-field] input,[data-task-field] select,[data-task-field] textarea')){
+ for(const control of properties.querySelectorAll('[data-task-field] input,[data-task-field] select,[data-task-field] textarea,.task-assignment select')){
   control.onblur=()=>{
-   control.closest('[data-task-field]').hidden=true;
+   const field=control.closest('[data-task-field]');
+   if(!field)return;
+   field.hidden=true;
    properties.querySelector('[data-property='+control.name+']').hidden=false;
   };
   control.onchange=()=>{
@@ -210,9 +232,10 @@ openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutto
     if(issue){control.value=t.status;return toast(issue);}
    }else t[key]=value;
    if(key==='priority')t.priorityOverride=true;
+   if(key==='owner'&&t.parentId)t.delegated=value!=='Unassigned';
    activity(t,'Updated '+control.labels[0].textContent.trim().split(/\s+/).slice(0,key==='nextAction'?2:1).join(' ').toLowerCase());
    save();render();
-   if(key==='status'){taskDetail(id);return;}
+   if(key==='status'||key==='owner'||key==='team'){taskDetail(id);return;}
    const updated=document.createElement('template');
    updated.innerHTML=taskProperties(t);
    for(const text of properties.querySelectorAll('[data-property] strong')){
@@ -233,6 +256,7 @@ openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutto
   const field=properties.querySelector('[name='+key+']');
   if(!field)return;
   const selected=field.closest('[data-task-field]');
+  if(!selected){field.focus();return;}
   for(const editor of properties.querySelectorAll('[data-task-field]'))editor.hidden=editor!==selected;
   for(const chip of properties.querySelectorAll('[data-property]'))chip.hidden=chip.dataset.property===key;
   const optional=selected.closest('[data-optional]');
@@ -259,13 +283,28 @@ const updateReminder=value=>{
   event.preventDefault();
   const title=event.target.elements.title.value.trim();
   if(!title)return;
-  state.tasks.push(newTaskRecord({title,parentId:id,shipmentId:t.shipmentId,team:event.target.elements['step-team'].value||t.team,owner:event.target.elements['step-team'].value?'Unassigned':t.owner,customer:taskCustomer(t)}));
+  const group=event.target.elements['step-team'].value;
+  const member=event.target.elements['step-owner'].value;
+  const step=newTaskRecord({title,parentId:id,shipmentId:t.shipmentId,team:group||t.team,owner:member||(group?'Unassigned':t.owner),clientId:t.clientId,customer:taskCustomer(t)});
+  if(member&&member!=='Unassigned')step.delegated=true;
+  state.tasks.push(step);
   activity(t,'Subtask added');save();render();taskDetail(id);$('#inline-subtask input')?.focus();
  });$('#parent-task')?.addEventListener('click',()=>taskDetail(t.parentId));document.querySelectorAll('[data-complete-child]').forEach(button=>button.onclick=()=>{
  const child=state.tasks.find(task=>task.id===button.dataset.completeChild);
- const issue=moveTask(state.tasks,child.id,'Completed');
+ const reopening=child.status==='Completed';
+ const issue=moveTask(state.tasks,child.id,reopening?'Up next':'Completed');
  if(issue)return toast(issue);
- activity(child,'Marked complete');
+ activity(child,reopening?'Reopened from checklist':'Marked complete');
+ if(reopening){
+  let ancestor=state.tasks.find(task=>task.id===child.parentId);
+  while(ancestor){
+   if(ancestor.status==='Completed'){
+    moveTask(state.tasks,ancestor.id,'Up next');
+    activity(ancestor,'Reopened because a checklist step was unchecked');
+   }
+   ancestor=state.tasks.find(task=>task.id===ancestor.parentId);
+  }
+ }
  save();render();taskDetail(id);
  });document.querySelectorAll('[data-child]').forEach(b=>b.onclick=()=>taskDetail(b.dataset.child));document.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>draftReply(b.dataset.reply));$('#share-task')?.addEventListener('click',()=>customerView(s.id));$('#link-email').onclick=()=>linkEmail(id);$('#complete-task')?.addEventListener('click',()=>{const issue=moveTask(state.tasks,id,'Completed');if(issue)return toast(issue);activity(t,'Marked complete');save();render();taskDetail(id);toast('Completed — dependent tasks can now move forward');});$('#note-form').onsubmit=e=>{e.preventDefault();const body=new FormData(e.target).get('note').trim();if(!body)return;t.notes.push({body,author:cloud.user?.email||'Ignacio',date:new Date().toISOString()});activity(t,'Internal note added');save();taskDetail(id);};}
 function mailKey(email){
@@ -297,23 +336,27 @@ function pendingReply(task,threads){
  const latest=threads.find(thread=>!thread.latest.deletedAt&&thread.taskIds.includes(task.id))?.latest;
  return latest&&new Date(latest.date)>new Date(task.mailReviewedAt||task.activity.at(-1)?.date||0)?latest:null;
 }
+function inboxCount(){
+ const archived=personalState('inbox-view');
+ return conversations().filter(thread=>!thread.taskIds.length&&!thread.latest.deletedAt&&archived[thread.key]?.latestId!==thread.latest.id).length;
+}
 function inboxHTML(){
  const metadata=personalState('inbox-view'),query=mailQuery.trim().toLowerCase();
  const threads=conversations().filter(thread=>{
   if(thread.latest.deletedAt||inboxFilter==='Trash')return Boolean(thread.latest.deletedAt)&&inboxFilter==='Trash'&&(!query||thread.messages.some(m=>[m.from,m.subject,m.body].join(' ').toLowerCase().includes(query)));
   const archived=metadata[thread.key]?.latestId===thread.latest.id;
   if(inboxFilter==='Archived'? !archived : archived)return false;
-  if(inboxFilter==='Unlinked'&&thread.taskIds.length)return false;
+  if(['Inbox','Unlinked'].includes(inboxFilter)&&thread.taskIds.length)return false;
   if(inboxFilter==='Linked'&&!thread.taskIds.length)return false;
   return !query||thread.messages.some(m=>[m.from,m.subject,m.body].join(' ').toLowerCase().includes(query));
  });
- const thread=mailReading?threads.find(item=>item.messages.some(m=>m.id===selectedEmail)):null;
+ const thread=mailReading?conversations().find(item=>item.messages.some(m=>m.id===selectedEmail)):null;
  const e=thread?.latest;
  const tasks=state.tasks.filter(t=>thread?.taskIds.includes(t.id));
  const reviewTasks=thread?emailUpdateCandidates(thread):[];
  const toolbar=`<div class="inbox-toolbar">
   <input type="search" id="mail-search" aria-label="Search email" placeholder="Search email" value="${esc(mailQuery)}">
-  <select id="mail-folder" aria-label="Mailbox folder">${options(['Inbox','Unlinked','Linked','Archived','Trash'],inboxFilter)}</select><button id="mail-select-mode" aria-pressed="${mailSelecting}">${mailSelecting?'Cancel':'Select'}</button>
+  <select id="mail-folder" aria-label="Mailbox folder">${options(['Inbox','Linked','Archived','Trash'],inboxFilter)}</select><button id="mail-select-mode" aria-pressed="${mailSelecting}">${mailSelecting?'Cancel':'Select'}</button>
   <span id="inbox-sync-state" class="muted" role="status"></span>
  </div>`;
  const list=threads.map(item=>`<div class="mail-select-row"><input ${mailSelecting?'':'hidden'} type="checkbox" data-select-mail="${esc(item.key)}" aria-label="Select ${esc(item.latest.subject)}" ${selectedThreads.has(item.key)?'checked':''}><button class="mail-row ${item===thread?'selected':''}" data-email="${esc(item.latest.id)}">
@@ -382,7 +425,7 @@ function bindInbox(){
    event.preventDefault();
    const id=new FormData(event.target).get('task');
    if(!id)return toast('Create a task first.');
-   addMailLink(e,id);save();$('#detail').close();render();
+   addMailLink(e,id);mailReading=false;save();$('#detail').close();render();
   };
  });
  showInboxSync();
@@ -391,7 +434,7 @@ function todayHTML(){
  const now=Date.now(),threads=conversations();
  const list=state.tasks.filter(t=>isBoardTask(t)&&t.status!=='Completed');
  const rows=(tasks,reason)=>tasks.map(task=>`<article class="today-row" data-task="${esc(task.id)}" tabindex="0">
-  <div><strong>${esc(task.title)}</strong><small>${esc([taskCustomer(task),task.waitingOn||task.owner,reason(task)].filter(Boolean).join(' · '))}</small></div>
+  <div><strong>${esc(taskHeading(task))}</strong><small>${esc([taskCustomer(task),task.waitingOn||task.owner,reason(task)].filter(Boolean).join(' · '))}</small></div>
   <div class="actions"><button data-today-assign="${esc(task.id)}">Assign</button><button data-today-snooze="${esc(task.id)}">Snooze</button><button data-today-done="${esc(task.id)}">Done</button></div>
  </article>`).join('')||'<p class="muted">Nothing in this queue.</p>';
  const replies=list.filter(t=>pendingReply(t,threads));
@@ -439,7 +482,7 @@ function bindPage(){if(page==='inbox')bindInbox();if(page==='today')bindToday();
 function validateBackup(data){if(data.groups&&(!Array.isArray(data.groups)||!data.groups.length||data.groups.some(g=>typeof g.id!=='string'||typeof g.name!=='string'||!g.name.trim()||typeof g.description!=='string'||!Array.isArray(g.members)||g.members.some(m=>typeof m!=='string'))||new Set(data.groups.map(g=>g.name.toLowerCase())).size!==data.groups.length))throw Error();if(data.people&&(!Array.isArray(data.people)||data.people.some(p=>typeof p.id!=='string'||typeof p.name!=='string'||typeof p.email!=='string'||!['Admin','Member'].includes(p.role))||new Set(data.people.map(p=>p.name.toLowerCase())).size!==data.people.length))throw Error();if(data.version!==1||!['tasks','shipments','emails','drafts'].every(k=>Array.isArray(data[k])))throw Error();const ids=new Set();for(const x of [...data.tasks,...data.shipments,...data.emails,...data.drafts]){if(typeof x.id!=='string'||!/^[a-zA-Z0-9-]+$/.test(x.id)||ids.has(x.id))throw Error();ids.add(x.id);}const tasks=new Set(data.tasks.map(t=>t.id)),ships=new Set(data.shipments.map(s=>s.id));for(const t of data.tasks){if(!['title','description','nextAction','owner','team','status','priority','due','followUp'].every(k=>typeof t[k]==='string')||!(data.groups?.map(g=>g.name)||DEFAULT_TEAMS).includes(t.team)||!STATUSES.includes(t.status)||!['Unassigned',...(data.people?.map(p=>p.name)||DEFAULT_USERS)].includes(t.owner)||!['Urgent','High','Normal','Low'].includes(t.priority)||!Array.isArray(t.notes)||!Array.isArray(t.activity)||!Array.isArray(t.dependencies)||t.dependencies.some(id=>!tasks.has(id))||(t.parentId&&!tasks.has(t.parentId))||(t.shipmentId&&!ships.has(t.shipmentId)))throw Error();}for(const t of data.tasks){let p=t.parentId;const seen=new Set([t.id]);while(p){if(seen.has(p))throw Error();seen.add(p);p=data.tasks.find(x=>x.id===p)?.parentId;}const walk=(id,path)=>{if(path.has(id))throw Error();const next=new Set([...path,id]);data.tasks.find(x=>x.id===id).dependencies.forEach(d=>walk(d,next));};walk(t.id,new Set());}for(const s of data.shipments)if(!['reference','customer','route','container','publicStatus','publicUpdate','nextUpdate'].every(k=>typeof s[k]==='string'))throw Error();for(const e of data.emails)if(!['from','subject','body','date'].every(k=>typeof e[k]==='string')||(e.taskId&&!tasks.has(e.taskId)))throw Error();}
 let appReady=false;startCloud(loadCloudState,()=>{appReady=true;render();});setInterval(()=>{if(appReady&&!$('#detail').open&&page==='workspace'&&document.activeElement?.tagName!=='INPUT')render();},60000);
 
-function focusHTML(list){const active=list.filter(t=>t.status!=='Completed'),first=active[0],rest=active.slice(1);return `<div class="focus-layout"><section class="action-stream"><div class="section-kicker"><span>01 / THE NEXT MOVE</span><span>Ranked by operational impact</span></div>${first?`<article class="spotlight" data-task="${first.id}" role="button" tabindex="0"><div class="spotlight-top"><span class="live-pill">PRIORITY ${esc(first.priority.toUpperCase())}</span><span>${esc(shipment(first.shipmentId)?.reference||'GENERAL REQUEST')}</span></div><h2>${esc(first.title)}</h2><p>${esc(first.nextAction||'Set the next action to move this forward.')}</p><div class="spotlight-footer"><span class="avatar">${esc(initials(first.owner))}</span><span>${esc(first.owner)}<small>${esc(first.team)}</small></span><span class="spotlight-reason">${esc(priority(first,state.tasks).reasons.slice(0,2).join(' · '))}</span><span class="arrow-disc">↗</span></div></article>`:'<div class="panel"><h2>A clear runway.</h2><p class="muted">No open work in this view.</p></div>'}<div class="section-kicker next-kicker"><span>02 / ON YOUR RADAR</span><span>${rest.length} open actions</span></div><div class="radar-list">${rest.map((t,i)=>`<button class="radar-row" data-task="${t.id}"><span class="radar-number">${String(i+2).padStart(2,'0')}</span><span class="radar-main"><strong>${esc(t.title)}</strong><small>${esc(shipment(t.shipmentId)?.reference||'General request')} <i>·</i> ${esc(t.team)} <i>·</i> ${esc(t.owner)}</small></span><span class="radar-status">${blockedBy(t,state.tasks).length?'Blocked':esc(t.status)}</span><span class="radar-arrow">↗</span></button>`).join('')}</div></section><aside class="team-orbit"><div class="section-kicker"><span>YOUR SPACES</span><button id="manage-spaces">Manage ↗</button></div>${state.groups.map((g,i)=>{const ts=state.tasks.filter(t=>t.team===g.name&&t.status!=='Completed');return `<button class="space-lane" data-queue="${esc(g.name)}"><span class="space-id">${String(i+1).padStart(2,'0')}</span><span class="space-main"><strong>${esc(g.name)}</strong><small>${g.members.length} ${g.members.length===1?'person':'people'} · ${ts.filter(t=>blockedBy(t,state.tasks).length).length} blocked</small></span><span class="space-total">${ts.length}</span></button>`;}).join('')}<div class="handoff-note"><span>↳</span><h3>Nothing falls between teams.</h3><p>Link the next action to its owner. Dependencies keep handoffs visible until the work is done.</p><button id="focus-new-group">Create a group +</button></div></aside></div>`;}
+function focusHTML(list){const active=list.filter(t=>t.status!=='Completed'),first=active[0],rest=active.slice(1);return `<div class="focus-layout"><section class="action-stream"><div class="section-kicker"><span>01 / THE NEXT MOVE</span><span>Ranked by operational impact</span></div>${first?`<article class="spotlight" data-task="${first.id}" role="button" tabindex="0"><div class="spotlight-top"><span class="live-pill">PRIORITY ${esc(first.priority.toUpperCase())}</span><span>${esc(shipment(first.shipmentId)?.reference||'GENERAL REQUEST')}</span></div><h2>${esc(taskHeading(first))}</h2><p>${esc(first.nextAction||'Set the next action to move this forward.')}</p><div class="spotlight-footer"><span class="avatar">${esc(initials(first.owner))}</span><span>${esc(first.owner)}<small>${esc(first.team)}</small></span><span class="spotlight-reason">${esc(priority(first,state.tasks).reasons.slice(0,2).join(' · '))}</span><span class="arrow-disc">↗</span></div></article>`:'<div class="panel"><h2>A clear runway.</h2><p class="muted">No open work in this view.</p></div>'}<div class="section-kicker next-kicker"><span>02 / ON YOUR RADAR</span><span>${rest.length} open actions</span></div><div class="radar-list">${rest.map((t,i)=>`<button class="radar-row" data-task="${t.id}"><span class="radar-number">${String(i+2).padStart(2,'0')}</span><span class="radar-main"><strong>${esc(taskHeading(t))}</strong><small>${esc(shipment(t.shipmentId)?.reference||'General request')} <i>·</i> ${esc(t.team)} <i>·</i> ${esc(t.owner)}</small></span><span class="radar-status">${blockedBy(t,state.tasks).length?'Blocked':esc(t.status)}</span><span class="radar-arrow">↗</span></button>`).join('')}</div></section><aside class="team-orbit"><div class="section-kicker"><span>YOUR SPACES</span><button id="manage-spaces">Manage ↗</button></div>${state.groups.map((g,i)=>{const ts=state.tasks.filter(t=>t.team===g.name&&t.status!=='Completed');return `<button class="space-lane" data-queue="${esc(g.name)}"><span class="space-id">${String(i+1).padStart(2,'0')}</span><span class="space-main"><strong>${esc(g.name)}</strong><small>${g.members.length} ${g.members.length===1?'person':'people'} · ${ts.filter(t=>blockedBy(t,state.tasks).length).length} blocked</small></span><span class="space-total">${ts.length}</span></button>`;}).join('')}<div class="handoff-note"><span>↳</span><h3>Nothing falls between teams.</h3><p>Link the next action to its owner. Dependencies keep handoffs visible until the work is done.</p><button id="focus-new-group">Create a group +</button></div></aside></div>`;}
 function groupsHTML(){return `<div class="directory-intro"><span class="directory-label">YOUR WORKSPACE, YOUR STRUCTURE</span><p>No preset departments. Build the groups that match the way you work.</p></div><div class="group-grid">${state.groups.map((g,i)=>{const tasks=state.tasks.filter(t=>t.team===g.name&&t.status!=='Completed');return `<article class="group-tile" style="--group-color:${groupColor(g)}"><div class="group-tile-top"><span class="group-number group-symbol">${esc(g.icon||'↗')}</span><button data-edit-group="${esc(g.id)}" aria-label="Edit ${esc(g.name)}">↗</button></div><div class="group-progress-ring" style="--completion:${state.tasks.filter(t=>t.team===g.name).length?Math.round(state.tasks.filter(t=>t.team===g.name&&t.status==='Completed').length/state.tasks.filter(t=>t.team===g.name).length*100):0}%"><span><b>${state.tasks.filter(t=>t.team===g.name).length?Math.round(state.tasks.filter(t=>t.team===g.name&&t.status==='Completed').length/state.tasks.filter(t=>t.team===g.name).length*100):0}%</b><small>complete</small></span></div><h2>${esc(g.name)}</h2><p>${esc(g.description||'Your team’s dedicated space.')}</p><div class="group-members">${g.members.slice(0,5).map(n=>`<span class="avatar" title="${esc(n)}">${esc(initials(n))}</span>`).join('')}<small>${g.members.length?g.members.length+(g.members.length===1?' person':' people'):'Add your people'}</small></div><div class="group-bottom"><span><b>${tasks.length}</b> open actions</span><button data-queue="${esc(g.name)}">Enter space →</button></div></article>`;}).join('')}<button class="group-create" id="tile-new-group"><span>＋</span><strong>Create a group</strong><small>Any team. Any workflow.</small></button></div><div class="people-heading"><div><span class="section-kicker">WORKSPACE DIRECTORY</span><h2>The people behind the work.</h2></div><button id="directory-add-person">＋ Add person</button></div><div class="notice">Assignment profiles organize work. Manage real sign-in access separately under Account. Profile roles do not grant account permissions.</div><div class="people-list">${state.people.map(p=>`<button class="person-row" data-edit-person="${esc(p.id)}"><span class="avatar">${esc(initials(p.name))}</span><span><strong>${esc(p.name)}</strong><small>${esc(p.email||'No email added')}</small></span><span class="person-groups">${state.groups.filter(g=>g.members.includes(p.name)).map(g=>esc(g.name)).join(' · ')||'No group assigned'}</span><span class="badge">${esc(p.role)} profile</span><span>↗</span></button>`).join('')}</div>`;}
 function bindDirectory(){$('#manage-spaces')?.addEventListener('click',()=>{page='groups';render();});for(const id of ['focus-new-group','tile-new-group'])$('#'+id)?.addEventListener('click',()=>groupEditor());$('#directory-add-person')?.addEventListener('click',()=>personEditor());document.querySelectorAll('[data-edit-group]').forEach(b=>b.onclick=()=>groupEditor(b.dataset.editGroup));document.querySelectorAll('[data-edit-person]').forEach(b=>b.onclick=()=>personEditor(b.dataset.editPerson));}
 function groupEditor(id){if(cloud.workspace&&cloud.role==='member')return toast('Only workspace owners and admins can edit groups.');const g=state.groups.find(g=>g.id===id)||{name:'',description:'',members:[],color:'#ff5938',icon:'↗'};openDialog(id?'Edit group':'Create your group',`<form id="group-form" class="form-grid"><label class="field full">Group name<input name="name" required maxlength="60" value="${esc(g.name)}" placeholder="e.g. Ocean exports, Pricing, Dispatch"></label><label class="field full">What does this group handle?<textarea name="description" maxlength="300" placeholder="Give this space a clear purpose.">${esc(g.description)}</textarea></label><label class="field">Accent color<input name="color" type="color" value="${groupColor(g)}"></label><label class="field">Icon<select name="icon">${options(['↗','▦','◈','◎','✦','◇','↔','▤'],g.icon||'↗')}</select></label><div class="full"><h3>Assign people</h3><p class="muted">Choose who belongs to this group.</p>${state.people.map(p=>`<label class="check-row"><input type="checkbox" name="members" value="${esc(p.name)}" ${g.members.includes(p.name)?'checked':''}>${esc(p.name)} <small class="muted">${esc(p.email)}</small></label>`).join('')}</div></form>`,`${id?'<button id="delete-group" class="danger">Delete group</button>':''}<button data-group-cancel>Cancel</button><button form="group-form" type="submit" class="primary">${id?'Save group':'Create group'}</button>`);$('#delete-group')?.addEventListener('click',()=>deleteGroupDialog(id));$('[data-group-cancel]').onclick=()=>$('#detail').close();$('#group-form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target),name=f.get('name').trim();if(!name||name.toLowerCase()==='all teams')return toast('Choose a group name other than All teams.');if(state.groups.some(x=>x.id!==id&&x.name.toLowerCase()===name.toLowerCase()))return toast('A group with that name already exists.');const data={name,description:f.get('description').trim(),members:f.getAll('members'),color:f.get('color'),icon:f.get('icon')};if(id){const old=g.name;state.tasks.filter(t=>t.team===old).forEach(t=>t.team=name);if(team===old)team=name;Object.assign(g,data);}else state.groups.push({...data,id:uid()});syncDirectory();save();$('#detail').close();render();toast(id?'Group updated':'Group created — ready for assignment');};}
@@ -548,10 +591,11 @@ function newTaskRecord(data){return {id:uid(),title:data.title.trim(),clientId:d
 function composerHTML(email){
  return `<form id="inline-capture" class="inline-capture" data-context="${esc(email?.id||'workspace')}">
   <div class="capture-row">
-   <input name="title" aria-label="New task title" maxlength="180" required placeholder="Task title" value="${esc((mailActionDraft?.title||email?.subject||'').slice(0,180))}">
+   <input name="title" aria-label="New task title" maxlength="180" required placeholder="Shipment ref or task title" value="${esc((mailActionDraft?.title||email?.subject||'').slice(0,180))}">
    ${workflowPicker(true)}
    <button class="primary" type="submit">Add task</button>
   </div>
+  <details class="quick-more capture-description"><summary>＋ Add description</summary><textarea name="description" aria-label="Task description" rows="2" maxlength="4000" placeholder="What needs to be done?"></textarea></details>
   ${customerPicker('',{composer:true})}
   ${email&&mailActionDraft?composerSuggestions(mailActionDraft):''}
   ${!email&&captureStatus!=='Up next'?`<small class="capture-destination">Adding to ${esc(captureStatus)}</small>`:''}
@@ -577,7 +621,7 @@ function bindComposer(email){
   const draft=email?mailActionDraft:null;
   const confirmed={};
   if(form.elements.applySuggestions?.checked)for(const element of form.querySelectorAll('[data-suggested-field]'))confirmed[element.dataset.suggestedField]=element.value;
-  const task=newTaskRecord({title,workflow:data.get('workflow'),status,owner:scope==='My next actions'?(myOwner()||'Unassigned'):owner==='All owners'?'Unassigned':owner,shipmentId:operationFilter,taskType:typeFilter,...confirmed});
+  const task=newTaskRecord({title,description:data.get('description').trim(),workflow:data.get('workflow'),status,owner:scope==='My next actions'?(myOwner()||'Unassigned'):owner==='All owners'?'Unassigned':owner,shipmentId:operationFilter,taskType:typeFilter,...confirmed});
   if(email&&draft?.requestKey){
    if(state.tasks.some(item=>item.requestKey===draft.requestKey))return toast('This request already has a task.');
    task.requestKey=draft.requestKey;
@@ -586,7 +630,7 @@ function bindComposer(email){
   state.tasks.push(task);addWorkflowSteps(task,steps);
   if(email){addMailLink(email,task.id);captureEmailId='';mailActionDraft=null;}
   else captureStatus='Up next';
-  form.reset();setCustomerChoice(form,'');form.elements.workflow.onchange();
+  form.reset();form.querySelector('.capture-description').open=false;setCustomerChoice(form,'');form.elements.workflow.onchange();
   save();render();
   if(email)taskDetail(task.id);
   else $('#inline-capture input')?.focus();
@@ -606,14 +650,18 @@ function taskProperties(task){
  const optional=(key,label,value,settings)=>`<div data-optional="${key}" ${value?'':'hidden'}>${field(key,label,value,settings)}</div>`;
  const more=(group,fields)=>`<select class="add-task-property" data-add-property="${group}" aria-label="Add ${group} detail"><option value="">＋ Add ${group} detail</option>${fields}</select>`;
  const due=task.due||'';
+ const parent=handoffParent(task);
  return `<div id="inline-properties" class="task-summary">
-  ${field('title','Task title',task.title,{style:'task-title-value'})}
+  ${parent?`<h2 class="shipment-task-heading">${esc(parent.title)}</h2>`:field('title','Shipment reference / task title',task.title,{style:'task-title-value'})}
+  ${parent?field('title','Work to do',task.title):''}
   ${customerPicker(task.clientId,{label:taskCustomer(task)})}
   <p class="muted task-reference-line" ${taskReferences(task).length?'':'hidden'}>${esc([...new Set(taskReferences(task))].join(' · '))}</p>
+  ${field('description','Description',task.description,{type:'textarea',style:'task-description-value'})}
   ${field('nextAction','Next action',task.nextAction,{display:nextAction(task),style:'task-next-value'})}
   <div class="task-summary-pair">
-   ${field('status','Status',task.status,{choices:options(STATUSES,task.status)})}
-   ${field('owner','Owner',task.owner,{choices:options(USERS,task.owner)})}
+   ${assignmentPicker('status','Status',STATUSES,task.status)}
+   ${assignmentPicker('team','Group',TEAMS,task.team)}
+   ${assignmentPicker('owner','Member',USERS,task.owner)}
   </div>
   ${task.status==='Waiting'?field('waitingOn','Waiting on',task.waitingOn):''}
   ${section('schedule',task.cutoff?'Schedule · Cutoff '+fmt(task.cutoff):due?'Schedule · Due '+fmt(due):'Schedule',[
@@ -622,17 +670,15 @@ function taskProperties(task){
    field('followUp','Follow-up reminder',task.followUp,{type:'datetime-local',display:task.followUp&&fmt(task.followUp)})
   ].join(''))}
   ${section('details','Task details',[
-   field('team','Department',task.team,{choices:options(TEAMS,task.team)}),
    optional('taskType','Type',task.taskType,{choices:options(['',...state.taskTypes],task.taskType||'')}),
    field('priority','Priority',task.priority,{display:task.priority+(task.priorityOverride?' · Manual':''),choices:options(priorities,task.priority)}),
-   optional('description','Instructions',task.description,{type:'textarea'}),
    optional('consequence','Consequence',task.consequence),
    optional('shipmentId','Operation',task.shipmentId,{display:shipment(task.shipmentId)?.reference,choices:operationOptions(task.shipmentId)}),
    optional('ourReference','Internal reference',task.ourReference),
    optional('customerReference','Customer reference',task.customerReference),
    optional('ftzReference','FTZ reference',task.ftzReference)
    ,more('task',[
-    ['taskType','Type',task.taskType],['description','Instructions',task.description],['consequence','Consequence',task.consequence],
+    ['taskType','Type',task.taskType],['consequence','Consequence',task.consequence],
     ['shipmentId','Operation',task.shipmentId],['ourReference','Internal reference',task.ourReference],
     ['customerReference','Customer reference',task.customerReference],['ftzReference','FTZ reference',task.ftzReference]
    ].filter(([, ,value])=>!value).map(([key,label])=>`<option value="${key}">${label}</option>`).join(''))
@@ -642,10 +688,10 @@ function taskProperties(task){
 function editCardValue(button){
  const task=state.tasks.find(item=>item.id===button.dataset.quickEdit);
  const key=button.dataset.field;
- const editor=document.createElement(key==='owner'?'select':'input');
+ const editor=document.createElement(['owner','team'].includes(key)?'select':'input');
  editor.className='board-inline-editor';
  editor.setAttribute('aria-label',button.textContent.trim());
- if(key==='owner')editor.innerHTML=options(USERS,task.owner);
+ if(key==='owner'||key==='team')editor.innerHTML=options(key==='owner'?USERS:TEAMS,task[key]);
  else if(key!=='nextAction')editor.type=dateOnly(task[key])?'date':'datetime-local';
  editor.value=task[key]||'';
  button.hidden=true;button.after(editor);
@@ -655,7 +701,9 @@ function editCardValue(button){
   if(event.key==='Enter')editor.blur();
  };
  editor.onchange=()=>{
-  task[key]=editor.value.trim();activity(task,'Updated '+({nextAction:'next action',due:'requested date',cutoff:'hard cutoff'}[key]||key));
+  task[key]=editor.value.trim();
+  if(key==='owner'&&task.parentId)task.delegated=task.owner!=='Unassigned';
+  activity(task,'Updated '+({nextAction:'next action',due:'requested date',cutoff:'hard cutoff'}[key]||key));
   save();render();
  };
  editor.focus();
@@ -826,9 +874,9 @@ function taskTable(list){
  for(const task of list){const label=groupLabel(task);if(!groups.has(label))groups.set(label,[]);groups.get(label).push(task);}
  return counts+bulk+([...groups].map(([label,tasks])=>`${label?`<h3 class="task-group-label">${esc(label)} <small>${tasks.length}</small></h3>`:''}<div class="table-wrap"><table><thead><tr><th></th><th>Task / next action</th><th>Client / reference</th><th>Department / owner</th><th>Status</th><th>Deadline</th><th>Priority / follow-up</th></tr></thead><tbody>${tasks.map(t=>`<tr tabindex="0" data-task="${esc(t.id)}">
   <td><input type="checkbox" data-select-task="${esc(t.id)}" aria-label="Select ${esc(t.title)}" ${selectedTasks.has(t.id)?'checked':''}></td>
-  <td><strong>${esc(t.title)}</strong><p class="muted">${esc(nextAction(t)||t.taskType||'')}</p></td>
+  <td><strong>${esc(taskHeading(t))}</strong><p class="muted">${esc(handoffParent(t)?t.title:t.description||nextAction(t)||t.taskType||'')}</p></td>
   <td>${esc(taskCustomer(t)||'—')}<br><small>${esc(taskReferences(t).join(' · '))}</small></td>
-  <td>${esc(t.team)}<select data-row-field="owner" aria-label="Owner">${options(USERS,t.owner)}</select>
+  <td><select data-row-field="team" aria-label="Group">${options(TEAMS,t.team)}</select><select data-row-field="owner" aria-label="Owner">${options(USERS,t.owner)}</select>
    ${t.owner==='Unassigned'&&myOwner()?'<button data-claim>Claim</button>':''}</td>
   <td><select data-row-field="status" aria-label="Status">${options(STATUSES,t.status)}</select>
   ${t.status==='Waiting'?`<input data-row-field="waitingOn" aria-label="Waiting on" placeholder="Waiting on…" value="${esc(t.waitingOn)}">`:''}</td>
@@ -886,6 +934,7 @@ function editRows(ids,key,value){
    const issue=moveTask(state.tasks,id,value);
    if(issue){skipped.push(task.title+' · '+issue);continue;}
   }else task[key]=value.trim();
+  if(key==='owner'&&task.parentId)task.delegated=task.owner!=='Unassigned';
   if(key==='priority')task.priorityOverride=true;
   activity(task,'Updated '+(key==='waitingOn'?'waiting on':key));
  }
@@ -957,7 +1006,7 @@ function bindCustomerDirectory(root){
 }
 function customerDetail(id){
  const client=state.clients.find(c=>c.id===id);
- openDialog(esc(client.name),`<div class="section-title"><h3>Operations</h3><button id="client-new-operation">New operation</button></div>${state.shipments.filter(s=>s.clientId===client.id||s.customer===client.name).map(s=>`<p><button data-open-operation="${esc(s.id)}">${esc(s.reference)}</button></p>`).join('')}<h3>Tasks</h3>${state.tasks.filter(isBoardTask).filter(t=>taskCustomer(t)===client.name).map(t=>`<p><button data-client-task="${esc(t.id)}">${esc(t.title)}</button> ${esc(t.status)}</p>`).join('')}`);
+ openDialog(esc(client.name),`<div class="section-title"><h3>Operations</h3><button id="client-new-operation">New operation</button></div>${state.shipments.filter(s=>s.clientId===client.id||s.customer===client.name).map(s=>`<p><button data-open-operation="${esc(s.id)}">${esc(s.reference)}</button></p>`).join('')}<h3>Tasks</h3>${state.tasks.filter(isBoardTask).filter(t=>taskCustomer(t)===client.name).map(t=>`<p><button data-client-task="${esc(t.id)}">${esc(taskHeading(t))}</button>${handoffParent(t)?' · '+esc(t.title):''} ${esc(t.status)}</p>`).join('')}`);
  $('#client-new-operation').onclick=()=>shipmentEditor(null,id);
  document.querySelectorAll('[data-client-task]').forEach(button=>button.onclick=()=>taskDetail(button.dataset.clientTask));
  document.querySelectorAll('[data-open-operation]').forEach(button=>button.onclick=()=>operationDetail(button.dataset.openOperation));
@@ -1140,7 +1189,7 @@ function operationDetail(id){
  const tasks=state.tasks.filter(task=>task.shipmentId===id);
  const threads=conversations().filter(thread=>thread.shipmentIds.includes(id)||tasks.some(task=>thread.taskIds.includes(task.id)));
  openDialog(esc(operation.reference),`<p class="muted">${esc(state.clients.find(c=>c.id===operation.clientId)?.name||operation.customer)} · ${esc(operation.route)}</p>
-  <h3>Tasks</h3>${tasks.map(t=>`<div class="section-title"><button data-operation-task="${esc(t.id)}">${esc(t.title)}</button><small>${esc(t.owner)} · ${esc(t.status)}</small></div>`).join('')||'<p>No tasks yet.</p>'}
+  <h3>Tasks</h3>${tasks.map(t=>`<div class="section-title"><button data-operation-task="${esc(t.id)}">${esc(taskHeading(t))}</button>${handoffParent(t)?' · '+esc(t.title):''}<small>${esc(t.owner)} · ${esc(t.status)}</small></div>`).join('')||'<p>No tasks yet.</p>'}
   <div class="section-title"><h3>Documents</h3><button id="add-operation-document">Link document</button></div>
   ${(operation.documents||[]).filter(doc=>safeDocumentURL(doc.url)).map(doc=>`<div class="section-title"><a href="${esc(doc.url)}" target="_blank" rel="noopener noreferrer">${esc(doc.name)}</a><button data-edit-document="${esc(doc.id)}">Edit</button></div>`).join('')||'<p>No document links yet.</p>'}
   <h3>Conversations and attachments</h3>${threads.map(thread=>`<div class="note"><button data-operation-email="${esc(thread.latest.id)}">${esc(thread.latest.subject)}</button>${thread.messages.map(attachmentButtons).join('')}</div>`).join('')||'<p>No conversations linked.</p>'}
@@ -1160,7 +1209,7 @@ function openInboxMessage(id){
  const thread=conversations().find(item=>item.messages.some(message=>message.id===id));
  if(!thread)return;
  selectedEmail=id;mailReading=true;captureEmailId='';mailActionDraft=null;mailQuery='';
- inboxFilter=thread.latest.deletedAt?'Trash':personalState('inbox-view')[thread.key]?.latestId===thread.latest.id?'Archived':'Inbox';
+ inboxFilter=thread.latest.deletedAt?'Trash':personalState('inbox-view')[thread.key]?.latestId===thread.latest.id?'Archived':thread.taskIds.length?'Linked':'Inbox';
  $('#detail').close();page='inbox';render();
 }
 function safeDocumentURL(value){
