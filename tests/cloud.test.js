@@ -74,7 +74,7 @@ test('FTZ filter includes admissions and their steps, and the reference is searc
   assert.equal(admission.workflow,'FTZ · Admission (214)');
   assert.equal(snapshot.tasks.filter(task=>task.parentId===admission.id).length,5);
   doc.querySelector('#ftz-filter').click();
-  assert.equal(doc.querySelectorAll('#task-results [data-task]').length,6);
+  assert.equal(doc.querySelectorAll('#task-results [data-task]').length,1);
   const search=doc.querySelector('#search');
   search.value='214-TEST-001';
   search.dispatchEvent(new w.Event('input',{bubbles:true}));
@@ -129,6 +129,7 @@ test('email capture links the original and supports references, a reminder, and 
   emailForm.elements.subject.value='Truck arrival schedule';
   emailForm.elements.body.value='Original carrier message.';
   submit(emailForm);
+  doc.querySelector('.mail-row').click();
   doc.querySelector('#email-task').click();
   const form=doc.querySelector('#inline-capture');
   assert.equal(form.elements.title.value,'Truck arrival schedule');
@@ -172,6 +173,8 @@ test('threaded replies reopen the operational loop in Today and can be reviewed'
   const doc=w.document;
   doc.querySelector('[data-page="inbox"]').click();
   assert.equal(doc.querySelectorAll('.mail-row').length,1);
+  assert.equal(doc.querySelectorAll('.mail-message').length,0);
+  doc.querySelector('.mail-row').click();
   assert.equal(doc.querySelectorAll('.mail-message').length,2);
   assert.ok(doc.querySelector('#open-linked'));
   doc.querySelector('[data-page="today"]').click();
@@ -217,7 +220,7 @@ test('Gmail conversation supports independent actions, review, assignment, compl
    if(index===0)doc.querySelector('#inline-capture [name=title]').value='Book confirmed pickup';
    submit('#inline-capture');click('[data-close]');
   }
-  click('[data-email="mail-c"]');click('[data-review-request="0"]');
+  click('#mail-back');click('[data-email="mail-c"]');click('[data-review-request="0"]');
   assert.match(doc.querySelector('#proposed-updates').textContent,/Current: 2026-11-18T16:00/);
   click('[data-confirm-change="cutoff"]');click('#apply-mail-update');
   click('[data-close]');click('[data-page="workspace"]');click('[data-view="List"]');
@@ -226,9 +229,10 @@ test('Gmail conversation supports independent actions, review, assignment, compl
   const status=doc.querySelector('[data-task="'+first+'"] [data-row-field="status"]');
   status.value='Completed';status.dispatchEvent(new w.Event('change'));
   click('[data-page="inbox"]');
+  click('#mail-select-mode');
   click('[data-select-mail="gmail-1:thread-a"]');
   click('[data-select-mail="gmail-1:thread-b"]');
-  click('#bulk-mail-action');click('[data-mail-filter="Trash"]');
+  click('#bulk-mail-action');const folder=doc.querySelector('#mail-folder');folder.value='Trash';folder.dispatchEvent(new w.Event('change'));
   assert.equal(doc.querySelectorAll('.mail-row').length,2);
   await new Promise(resolve=>setTimeout(resolve,100));
   assert.equal(snapshot.tasks.length,2);
@@ -244,7 +248,7 @@ test('Gmail conversation supports independent actions, review, assignment, compl
 });
 
 test('transport template creates a checklist and task card reveals one inline editor on demand',async()=>{
- const {dom,w,snapshot}=await app(true);
+ const {dom,w,snapshot}=await app(true,{groups:[{id:'ops',name:'Ops',description:'',members:[]},{id:'warehouse',name:'Warehouse',description:'',members:[]}]});
  try{
   const doc=w.document;
   const form=doc.querySelector('#inline-capture');
@@ -271,5 +275,22 @@ test('transport template creates a checklist and task card reveals one inline ed
   assert.equal(snapshot.tasks[0].workflow,'Drayage');
   assert.equal(snapshot.tasks[0].nextAction,'Call terminal');
   assert.equal(snapshot.tasks.filter(item=>item.parentId===snapshot.tasks[0].id).length,4);
+  assert.equal(doc.querySelectorAll('#task-results [data-task]').length,1);
+  const parent=snapshot.tasks[0];
+  doc.querySelector('[data-close]').click();
+  doc.querySelector('[data-quick-edit="'+parent.id+'"][data-field="nextAction"]').click();
+  const inline=doc.querySelector('.board-inline-editor');
+  assert.equal(doc.querySelector('#detail').open,false);
+  inline.value='Confirm appointment';
+  inline.dispatchEvent(new w.Event('change'));
+  doc.querySelector('#task-results .card-open').click();
+  const handoff=doc.querySelector('#inline-subtask');
+  handoff.elements.title.value='Count received pallets';
+  handoff.elements['step-team'].value='Warehouse';
+  handoff.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  assert.equal(doc.querySelectorAll('#task-results [data-task]').length,2);
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.ok(snapshot.tasks.some(item=>item.parentId===parent.id&&item.team==='Warehouse'&&item.owner==='Unassigned'));
+
  }finally{dom.window.close();}
 });
