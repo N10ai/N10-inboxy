@@ -759,3 +759,31 @@ button { border-color: #fff7; }
 .request-row{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin:.4rem 0}
 .request-row>span{flex:1;min-width:12rem}
 .client-row{margin-block:.35rem}
+
+/* The task opens as a readable summary. Each row reveals its own editor. */
+.task-summary,.task-value,.task-summary-pair>*{min-width:0}
+.task-summary-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem}
+.task-value>button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.12rem .6rem;width:100%;min-height:44px;text-align:left;border-radius:.7rem;padding:.55rem .65rem}
+.task-value>button small{grid-column:1;color:var(--muted);font-size:.73rem}
+.task-value>button strong{grid-column:1;overflow-wrap:anywhere}
+.task-value>button span{grid-area:1 / 2 / 3;align-self:center;opacity:.6}
+.task-title-value>button{font-size:clamp(1.25rem,4vw,1.85rem);padding-inline:0;background:transparent;border-color:transparent}
+.task-title-value>button small{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.task-next-value{margin:.45rem 0 .65rem}
+.task-next-value>button{border-inline-start:3px solid var(--accent,#ac623d)}
+.task-value>[data-task-field]{margin:.3rem 0 .55rem}
+.task-value>[data-task-field][hidden],.template-preview[hidden]{display:none}
+.task-value input,.task-value select,.task-value textarea{min-width:0;max-width:100%;width:100%;box-sizing:border-box}
+.task-section,.task-checklist,.task-follow-up{margin-block:.45rem}
+.task-section .task-value>button{background:transparent;border-color:transparent}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+@media(max-width:520px){
+ .task-value input,.task-value select,.task-value textarea{font-size:16px}
+ .task-checklist .inline-form{display:flex;width:100%}
+ .task-checklist .inline-form input{min-width:0;flex:1}
+}
+.task-summary .task-reference-line[hidden]{display:none}
+#detail:has(.task-summary) .quick-more>summary {font-size:.88rem;padding:.65rem 0;color:inherit}
+#detail:has(.task-summary) .dialog-head,#detail:has(.task-summary) .dialog-body{padding-block:1rem}
+#detail:has(.task-summary) .dialog-footer{position:sticky;bottom:0;background:inherit}
+.task-checklist .section-title{margin-top:.25rem}

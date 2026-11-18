@@ -242,3 +242,34 @@ test('Gmail conversation supports independent actions, review, assignment, compl
   assert.equal(snapshot.emails.filter(m=>m.deletedAt).length,2);
  }finally{dom.window.close();}
 });
+
+test('transport template creates a checklist and task card reveals one inline editor on demand',async()=>{
+ const {dom,w,snapshot}=await app(true);
+ try{
+  const doc=w.document;
+  const form=doc.querySelector('#inline-capture');
+  for(const name of ['Air Import','Air Export','Ocean Import','Ocean Export','Drayage']){
+   assert.ok([...form.elements.workflow.options].some(option=>option.value===name));
+  }
+  form.elements.workflow.value='Drayage';
+  form.elements.workflow.dispatchEvent(new w.Event('change'));
+  assert.equal(form.querySelector('[data-workflow-steps]').open,false);
+  form.elements.workflowStep[0].checked=false;
+  form.elements.title.value='Pull container ABC';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  doc.querySelector('#task-results .card-open').click();
+  const task=doc.querySelector('#inline-properties');
+  assert.equal(task.querySelectorAll('[data-task-field]:not([hidden])').length,0);
+  assert.equal(task.querySelector('[data-task-section="details"]').open,false);
+  task.querySelector('[data-property="nextAction"]').click();
+  task.querySelector('[name="nextAction"]').value='Call terminal';
+  task.querySelector('[name="nextAction"]').dispatchEvent(new w.Event('change'));
+  assert.match(task.querySelector('[data-property="nextAction"]').textContent,/Call terminal/);
+  task.querySelector('[data-property="owner"]').click();
+  assert.equal(task.querySelectorAll('[data-task-field]:not([hidden])').length,1);
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks[0].workflow,'Drayage');
+  assert.equal(snapshot.tasks[0].nextAction,'Call terminal');
+  assert.equal(snapshot.tasks.filter(item=>item.parentId===snapshot.tasks[0].id).length,4);
+ }finally{dom.window.close();}
+});

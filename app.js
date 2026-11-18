@@ -136,14 +136,14 @@ function taskEditor(id){
 }
 function hasDependencyPath(start,target,visited=new Set()){if(!target)return false;if(start===target)return true;if(visited.has(start))return false;visited.add(start);return state.tasks.find(t=>t.id===start)?.dependencies.some(d=>hasDependencyPath(d,target,visited))||false;}
 function taskDetail(id,focus){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),threads=conversations().filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks);
-openDialog('Task',`<div class="actions task-context"><span class="badge">${esc(t.team)}</span>${t.workflow?`<span class="badge">${esc(t.workflow)}</span>`:''}</div><h2>${esc(t.title)}</h2>${taskCustomer(t)||taskReferences(t).length?`<p class="muted task-reference-line">${esc([taskCustomer(t),...new Set(taskReferences(t))].filter(Boolean).join(' · '))}</p>`:''}${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}${t.description?`<p>${esc(t.description)}</p>`:''}<div class="task-follow-up">${t.followUp?`Reminder ${esc(fmt(t.followUp))}`:''}${t.status==='Completed'?'':`<div class="actions task-reminders">${reminderButtons()}<button id="custom-reminder">Pick a time</button>${t.followUp?'<button id="clear-reminder">Clear reminder</button>':''}</div>`}</div><div class="section-title"><h3>Subtasks <span class="muted">${children.filter(x=>x.status==='Completed').length}/${children.length}</span></h3>${t.status==='Completed'?'':'<form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form>'}</div>${children.map(c=>`<div class="check-row"><button class="small" data-complete-child="${c.id}" aria-label="Complete ${esc(c.title)}" ${c.status==='Completed'?'disabled':''}>${c.status==='Completed'?'✓':'○'}</button><span>${esc(c.title)}<small class="muted"> · ${esc(c.team)} / ${esc(c.owner)}</small></span><button data-child="${c.id}" class="small">Open</button></div>`).join('')||'<p class="muted">Break this work into clear team handoffs.</p>'}<details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><h3>Internal notes</h3>${t.notes.map(n=>`<div class="note">${esc(n.body)}<small>${esc(n.author)} · ${esc(fmt(n.date))}</small></div>`).join('')}<form id="note-form" class="inline-form"><textarea name="note" aria-label="Internal note" required placeholder="Add an internal note…"></textarea><button>Add note</button></form><h3>Activity</h3>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}`,`<button id="delete-task" class="danger">Delete</button><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`);
+openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}<details class="quick-more task-follow-up"><summary>${t.followUp?'Reminder · '+esc(fmt(t.followUp)):'Set reminder'}</summary>${t.status==='Completed'?'':`<div class="actions task-reminders">${reminderButtons()}<button id="custom-reminder">Pick a time</button>${t.followUp?'<button id="clear-reminder">Clear reminder</button>':''}</div>`}</details><details class="quick-more task-checklist" ${children.length?'open':''}><summary>Checklist${children.length?' · '+children.filter(x=>x.status==='Completed').length+'/'+children.length:''}</summary><div class="section-title"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':'<form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form>'}</div>${children.map(c=>`<div class="check-row"><button class="small" data-complete-child="${c.id}" aria-label="Complete ${esc(c.title)}" ${c.status==='Completed'?'disabled':''}>${c.status==='Completed'?'✓':'○'}</button><span>${esc(c.title)}<small class="muted"> · ${esc(c.team)} / ${esc(c.owner)}</small></span><button data-child="${c.id}" class="small">Open</button></div>`).join('')}</details><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Notes${t.notes.length?' · '+t.notes.length:''}</summary>${t.notes.map(n=>`<div class="note">${esc(n.body)}<small>${esc(n.author)} · ${esc(fmt(n.date))}</small></div>`).join('')}<form id="note-form" class="inline-form"><textarea name="note" aria-label="Internal note" required placeholder="Add an internal note…"></textarea><button>Add note</button></form></details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`);
  bindAttachments();
  document.querySelectorAll('[data-source-email]').forEach(button=>button.onclick=()=>openInboxMessage(button.dataset.sourceEmail));
  $('#mark-mail-reviewed')?.addEventListener('click',()=>{t.mailReviewedAt=new Date().toISOString();save();render();taskDetail(id);});
  $('#edit-task').onclick=()=>taskEditor(id);
  $('#delete-task')?.addEventListener('click',()=>confirmTaskDeletion([id]));
  const properties=$('#inline-properties');
- for(const control of properties.querySelectorAll('input,select')){
+ for(const control of properties.querySelectorAll('input,select,textarea')){
   control.onchange=()=>{
    const key=control.name,value=control.value.trim();
    if(key==='title'&&!value){control.value=t.title;return toast('Enter a task title.');}
@@ -154,24 +154,38 @@ openDialog('Task',`<div class="actions task-context"><span class="badge">${esc(t
    }else t[key]=value;
    if(key==='priority')t.priorityOverride=true;
    activity(t,'Updated '+control.labels[0].textContent.trim().split(/\s+/).slice(0,key==='nextAction'?2:1).join(' ').toLowerCase());
-   const chip=properties.querySelector('[data-property='+key+']');
-   if(chip){
-    const display=key==='customer'?taskCustomer(t):value;
-    chip.textContent=display?chip.dataset.label+' · '+display:'+ '+chip.dataset.label;
-    chip.title=display||chip.dataset.label;
-   }
    save();render();
-   if(['status','followUp','title','description','team','clientId','shipmentId','priority','taskType'].includes(key))taskDetail(id);
+   if(key==='status'){taskDetail(id);return;}
+   const updated=document.createElement('template');
+   updated.innerHTML=taskProperties(t);
+   for(const text of properties.querySelectorAll('[data-property] strong')){
+    const property=text.parentElement.dataset.property;
+    text.textContent=updated.content.querySelector('[data-property='+property+'] strong').textContent;
+   }
+   for(const node of properties.querySelectorAll('[data-task-section] > summary,.task-reference-line')){
+    const selector=node.parentElement.matches('[data-task-section]')?'[data-task-section='+node.parentElement.dataset.taskSection+'] > summary':'.task-reference-line';
+    node.textContent=updated.content.querySelector(selector)?.textContent||'';
+    if(node.matches('.task-reference-line'))node.hidden=!node.textContent;
+   }
   };
  }
  const showProperty=key=>{
   const field=properties.querySelector('[name='+key+']');
-  for(const item of properties.querySelectorAll('.task-property-fields .field'))item.hidden=item!==field.parentElement;
+  if(!field)return;
+  const selected=field.closest('[data-task-field]');
+  for(const editor of properties.querySelectorAll('[data-task-field]'))editor.hidden=editor!==selected;
   for(const chip of properties.querySelectorAll('[data-property]'))chip.setAttribute('aria-expanded',String(chip.dataset.property===key));
+  const section=selected.closest('details');
+  if(section)section.open=true;
   field.focus();
  };
  properties.querySelectorAll('[data-property]').forEach(chip=>chip.onclick=()=>showProperty(chip.dataset.property));
- if(focus){const control=properties.querySelector('[name='+focus+']');if(control?.parentElement.hidden)showProperty(focus);else control?.focus();}
+ properties.onkeydown=event=>{
+  if(event.key!=='Enter'||event.target.tagName!=='INPUT')return;
+  event.preventDefault();event.target.blur();
+ };
+ if(focus)showProperty(focus);
+
 const updateReminder=value=>{
   t.followUp=value;activity(t,value?'Follow-up reminder set':'Follow-up reminder cleared');save();render();taskDetail(id);
  };
@@ -370,7 +384,15 @@ function bindDirectory(){$('#manage-spaces')?.addEventListener('click',()=>{page
 function groupEditor(id){if(cloud.workspace&&cloud.role==='member')return toast('Only workspace owners and admins can edit groups.');const g=state.groups.find(g=>g.id===id)||{name:'',description:'',members:[],color:'#ff5938',icon:'↗'};openDialog(id?'Edit group':'Create your group',`<form id="group-form" class="form-grid"><label class="field full">Group name<input name="name" required maxlength="60" value="${esc(g.name)}" placeholder="e.g. Ocean exports, Pricing, Dispatch"></label><label class="field full">What does this group handle?<textarea name="description" maxlength="300" placeholder="Give this space a clear purpose.">${esc(g.description)}</textarea></label><label class="field">Accent color<input name="color" type="color" value="${groupColor(g)}"></label><label class="field">Icon<select name="icon">${options(['↗','▦','◈','◎','✦','◇','↔','▤'],g.icon||'↗')}</select></label><div class="full"><h3>Assign people</h3><p class="muted">Choose who belongs to this group.</p>${state.people.map(p=>`<label class="check-row"><input type="checkbox" name="members" value="${esc(p.name)}" ${g.members.includes(p.name)?'checked':''}>${esc(p.name)} <small class="muted">${esc(p.email)}</small></label>`).join('')}</div></form>`,`${id?'<button id="delete-group" class="danger">Delete group</button>':''}<button data-group-cancel>Cancel</button><button form="group-form" type="submit" class="primary">${id?'Save group':'Create group'}</button>`);$('#delete-group')?.addEventListener('click',()=>deleteGroupDialog(id));$('[data-group-cancel]').onclick=()=>$('#detail').close();$('#group-form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target),name=f.get('name').trim();if(!name||name.toLowerCase()==='all teams')return toast('Choose a group name other than All teams.');if(state.groups.some(x=>x.id!==id&&x.name.toLowerCase()===name.toLowerCase()))return toast('A group with that name already exists.');const data={name,description:f.get('description').trim(),members:f.getAll('members'),color:f.get('color'),icon:f.get('icon')};if(id){const old=g.name;state.tasks.filter(t=>t.team===old).forEach(t=>t.team=name);if(team===old)team=name;Object.assign(g,data);}else state.groups.push({...data,id:uid()});syncDirectory();save();$('#detail').close();render();toast(id?'Group updated':'Group created — ready for assignment');};}
 function personEditor(id){if(cloud.workspace&&cloud.role==='member')return toast('Only workspace owners and admins can edit profiles.');const p=state.people.find(p=>p.id===id)||{name:'',email:'',role:'Member'};openDialog(id?'Edit person':'Add a person',`<div class="notice">Create an assignment profile. To allow sign-in, use Account → Workspace access with the same email.</div><form id="person-form" class="form-grid" style="margin-top:20px"><label class="field full">Full name<input name="name" required maxlength="80" value="${esc(p.name)}" placeholder="Name used on assignments"></label><label class="field">Email<input name="email" type="email" value="${esc(p.email)}" placeholder="name@company.com"></label><label class="field">Profile role<select name="role">${options(['Member','Admin'],p.role)}</select></label><div class="full"><h3>Groups</h3>${state.groups.map(g=>`<label class="check-row"><input type="checkbox" name="groups" value="${esc(g.id)}" ${g.members.includes(p.name)?'checked':''}>${esc(g.name)}</label>`).join('')}</div></form>`,`<button data-person-cancel>Cancel</button><button form="person-form" type="submit" class="primary">Save person</button>`);$('[data-person-cancel]').onclick=()=>$('#detail').close();$('#person-form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target),name=f.get('name').trim(),email=f.get('email').trim();if(!name||['unassigned','all owners'].includes(name.toLowerCase()))return toast('Choose a valid person name.');if(state.people.some(x=>x.id!==id&&(x.name.toLowerCase()===name.toLowerCase()||(email&&x.email.toLowerCase()===email.toLowerCase()))))return toast('That name or email already exists.');const old=p.name;if(id){state.tasks.filter(t=>t.owner===old).forEach(t=>t.owner=name);if(owner===old)owner=name;Object.assign(p,{name,email,role:f.get('role')});}else state.people.push({id:uid(),name,email,role:f.get('role')});const selected=f.getAll('groups');for(const g of state.groups){g.members=g.members.filter(n=>n!==old&&n!==name);if(selected.includes(g.id))g.members.push(name);}syncDirectory();save();$('#detail').close();render();toast('Person saved — available for task assignment');};}
 
+const transportTemplates = {
+ 'Air Import': ['Review pre-alert, AWB and commercial documents', 'Confirm flight arrival and cargo availability', 'Verify carrier and customs release', 'Arrange airport pickup and delivery', 'Record delivery confirmation'],
+ 'Air Export': ['Confirm airline booking and cargo cutoff', 'Verify pieces, weight, dimensions and shipping documents', 'Confirm applicable screening and export filing', 'Tender cargo and confirm airline acceptance', 'Verify departure and send pre-alert'],
+ 'Ocean Import': ['Review bill of lading, pre-alert and release instructions', 'Confirm arrival, availability and last free day', 'Verify customs, carrier and terminal releases', 'Arrange pickup and delivery', 'Confirm empty return when applicable'],
+ 'Ocean Export': ['Book space and confirm documentation and terminal cutoffs', 'Coordinate equipment pickup and loading', 'Confirm shipping instructions, applicable export filing and VGM', 'Verify terminal gate-in before cutoff', 'Confirm sailing and send final documents'],
+ 'Drayage': ['Confirm container, terminal and last free day', 'Verify releases and equipment needs', 'Book terminal and delivery appointments', 'Dispatch driver and track pickup and delivery', 'Confirm empty return and record interchange receipt'],
+};
 const workflowTemplates = {
+ ...transportTemplates,
  'Pickup': ['Create pickup in the operations system', 'Send pickup details to the customer', 'Confirm carrier and appointment', 'Provide pickup documents', 'Confirm pickup completed', 'Confirm arrival and record proof of delivery'],
  'Import': ['Review pre-alert and shipping documents', 'Track arrival and confirm availability', 'Coordinate customs release', 'Arrange cargo pickup or delivery', 'Confirm delivery and close file'],
  'Export': ['Confirm booking and cutoffs', 'Collect cargo and export documents', 'Confirm applicable export filings', 'Deliver cargo to carrier', 'Confirm departure and send pre-alert'],
@@ -436,16 +458,24 @@ function isFtzTask(task){
  return Boolean(task.ftzReference||record?.ftzReference||record?.workflow?.startsWith('FTZ · '));
 }
 function workflowPicker(compact=false) {
- return `<label class="field full">Workflow template<select name="workflow"><option value="">${compact?'Template':'General task'}</option>${options(Object.keys(visibleTemplates()).filter(name=>!name.startsWith('FTZ · ')),'')}<optgroup label="Foreign-Trade Zone">${options(Object.keys(visibleTemplates()).filter(name=>name.startsWith('FTZ · ')),'')}</optgroup></select></label><div class="full" data-workflow-steps hidden></div>`;
+ const names=Object.keys(visibleTemplates());
+ const groups=[
+  ['Air, ocean & drayage',names.filter(name=>Object.hasOwn(transportTemplates,name))],
+  ['Logistics & custom',names.filter(name=>!Object.hasOwn(transportTemplates,name)&&!name.startsWith('FTZ · '))],
+  ['Foreign-Trade Zone',names.filter(name=>name.startsWith('FTZ · '))]
+ ];
+ return `<label class="field full">Workflow template<select name="workflow"><option value="">${compact?'Template':'General task'}</option>${groups.map(([label,items])=>`<optgroup label="${label}">${options(items,'')}</optgroup>`).join('')}</select></label><details class="quick-more template-preview" data-workflow-steps hidden></details>`;
 }
 function bindWorkflow(form) {
  const picker = form.elements.workflow;
  if (!picker) return;
  picker.onchange = () => {
-  const steps = Object.hasOwn(visibleTemplates(),picker.value)?visibleTemplates()[picker.value]:[];
+  const templates=visibleTemplates();
+  const steps=Object.hasOwn(templates,picker.value)?templates[picker.value]:[];
   const preview = form.querySelector('[data-workflow-steps]');
   preview.hidden = !steps.length;
-  preview.innerHTML = steps.map(step=>`<label class="check-row"><input type="checkbox" name="workflowStep" value="${esc(step)}" checked> ${esc(step)}</label>`).join('');
+  preview.open=false;
+  preview.innerHTML = `<summary>Preview checklist · ${steps.length} steps</summary>`+steps.map(step=>`<label class="check-row"><input type="checkbox" name="workflowStep" value="${esc(step)}" checked> ${esc(step)}</label>`).join('');
  };
 }
 function addWorkflowSteps(parent, steps) {
@@ -500,32 +530,44 @@ function bindComposer(email){
  };
 }
 function taskProperties(task){
- const fields=[
-  ['priority','Priority',task.priority+(task.priorityOverride?' · Manual':''),options(priorities,task.priority)],
-  ['taskType','Type',task.taskType,options(['',...state.taskTypes],task.taskType||'')],
-  ['team','Department',task.team,options(TEAMS,task.team)],
-  ['clientId','Client',state.clients.find(item=>item.id===task.clientId)?.name,clientOptions(task.clientId)],
-  ['shipmentId','Operation',shipment(task.shipmentId)?.reference,operationOptions(task.shipmentId)],
-  ['consequence','Consequence',task.consequence],
-  ['description','Instructions',task.description],
-  ['customer','Customer',taskCustomer(task)],
-  ['ourReference','Our ref',task.ourReference],
-  ['customerReference','Customer ref',task.customerReference],
-  ['ftzReference','FTZ ref',task.ftzReference],
- ];
- return `<div id="inline-properties">
-  <div class="task-properties">
-   <label class="field">Status<select name="status">${options(STATUSES,task.status)}</select></label>
-   <label class="field">Owner<select name="owner">${options(USERS,task.owner)}</select></label>
-   ${task.status==='Waiting'?`<label class="field">Waiting on<input name="waitingOn" maxlength="120" placeholder="Person or missing item" value="${esc(task.waitingOn)}"></label>`:''}
-   <label class="field">Requested by<input type="datetime-local" name="due" value="${esc(dateOnly(task.due)?task.due+'T23:59':task.due)}"></label><label class="field">Hard cutoff<input type="datetime-local" name="cutoff" value="${esc(task.cutoff)}"></label>
+ const field=(key,label,value,{choices,type='text',display=value,style='',limit=180}={})=>{
+  const control=choices?`<select name="${key}">${choices}</select>`:type==='textarea'?
+   `<textarea name="${key}" rows="3" maxlength="4000">${esc(value)}</textarea>`:
+   `<input name="${key}" type="${type}" maxlength="${limit}" value="${esc(value)}">`;
+  return `<div class="task-value ${style}"><button type="button" data-property="${key}" aria-expanded="false" aria-label="Edit ${label}">
+   <small>${label}</small><strong>${esc(display||'Add '+label.toLowerCase())}</strong><span aria-hidden="true">✎</span>
+  </button><label class="field" data-task-field hidden>${label}${control}</label></div>`;
+ };
+ const section=(key,title,body)=>`<details class="quick-more task-section" data-task-section="${key}"><summary>${esc(title)}</summary>${body}</details>`;
+ const due=task.due||'';
+ const context=[taskCustomer(task),...new Set(taskReferences(task))].filter(Boolean).join(' · ');
+ return `<div id="inline-properties" class="task-summary">
+  ${field('title','Task title',task.title,{style:'task-title-value'})}
+  <p class="muted task-reference-line" ${context?'':'hidden'}>${esc(context)}</p>
+  ${field('nextAction','Next action',task.nextAction,{display:nextAction(task),style:'task-next-value'})}
+  <div class="task-summary-pair">
+   ${field('status','Status',task.status,{choices:options(STATUSES,task.status)})}
+   ${field('owner','Owner',task.owner,{choices:options(USERS,task.owner)})}
   </div>
-  <div class="actions task-property-chips">${fields.map(([key,label,value])=>`<button type="button" data-property="${key}" data-label="${label}" title="${esc(value||label)}" aria-expanded="false">${esc(value?label+' · '+value:'+ '+label)}</button>`).join('')}</div>
-  <div class="task-property-fields">
-   ${fields.map(([key,label,,choices])=>`<label class="field" hidden>${label}${choices?`<select name="${key}">${choices}</select>`:`<input name="${key}" maxlength="120" value="${esc(task[key])}">`}</label>`).join('')}
-   <label class="field" hidden>Reminder<input type="datetime-local" name="followUp" value="${esc(task.followUp)}"></label>
-  </div>
-  <label class="field task-next-field">Title<input name="title" required maxlength="180" value="${esc(task.title)}"></label><label class="field task-next-field">Next action<input name="nextAction" maxlength="180" value="${esc(task.nextAction)}" placeholder="${esc(nextAction(task)||'What happens next?')}"></label>
+  ${task.status==='Waiting'?field('waitingOn','Waiting on',task.waitingOn):''}
+  ${section('schedule',task.cutoff?'Schedule · Cutoff '+fmt(task.cutoff):due?'Schedule · Due '+fmt(due):'Schedule',[
+   field('due','Requested by',due,{type:dateOnly(due)?'date':'datetime-local',display:due&&fmt(due)}),
+   field('cutoff','Hard cutoff',task.cutoff,{type:'datetime-local',display:task.cutoff&&fmt(task.cutoff)}),
+   field('followUp','Follow-up reminder',task.followUp,{type:'datetime-local',display:task.followUp&&fmt(task.followUp)})
+  ].join(''))}
+  ${section('details','Task details',[
+   field('team','Department',task.team,{choices:options(TEAMS,task.team)}),
+   field('taskType','Type',task.taskType,{choices:options(['',...state.taskTypes],task.taskType||'')}),
+   field('priority','Priority',task.priority,{display:task.priority+(task.priorityOverride?' · Manual':''),choices:options(priorities,task.priority)}),
+   field('description','Instructions',task.description,{type:'textarea'}),
+   field('consequence','Consequence',task.consequence),
+   field('clientId','Client',task.clientId,{display:state.clients.find(c=>c.id===task.clientId)?.name,choices:clientOptions(task.clientId)}),
+   field('shipmentId','Operation',task.shipmentId,{display:shipment(task.shipmentId)?.reference,choices:operationOptions(task.shipmentId)}),
+   field('customer','Customer name',task.customer,{display:taskCustomer(task)}),
+   field('ourReference','Internal reference',task.ourReference),
+   field('customerReference','Customer reference',task.customerReference),
+   field('ftzReference','FTZ reference',task.ftzReference)
+  ].join(''))}
  </div>`;
 }
 function applyBoardMove(id,status,beforeId=null){const t=state.tasks.find(t=>t.id===id);if(!t)return;const old=t.status;const issue=moveTask(state.tasks,id,status,beforeId);if(issue){toast(issue);render();return;}activity(t,old===status?'Reordered on board':`Moved from ${old} to ${status}`);save();render();toast(old===status?'Card reordered':`Moved to ${status}`);}
