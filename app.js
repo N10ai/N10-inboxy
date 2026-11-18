@@ -143,9 +143,49 @@ function taskEditor(id){
  };
 }
 function hasDependencyPath(start,target,visited=new Set()){if(!target)return false;if(start===target)return true;if(visited.has(start))return false;visited.add(start);return state.tasks.find(t=>t.id===start)?.dependencies.some(d=>hasDependencyPath(d,target,visited))||false;}
+function checklistItem(step,openStep){
+ const late=step.status!=='Completed'&&dueTime(deadline(step))<Date.now();
+ const open=step.id===openStep;
+ return `<div class="checklist-item">
+  <button class="small" data-complete-child="${esc(step.id)}" aria-label="Complete ${esc(step.title)}" ${step.status==='Completed'?'disabled':''}>${step.status==='Completed'?'✓':'○'}</button>
+  <details class="checklist-milestone" ${open?'open':''}>
+   <summary><strong>${esc(step.title)}</strong>
+    ${step.due||step.cutoff?`<span class="milestone-dates ${late?'milestone-late':''}">${[step.due?'Scheduled '+fmt(step.due):'',step.cutoff?'Cutoff '+fmt(step.cutoff):''].filter(Boolean).map(esc).join(' · ')}${late?' · Overdue':''}</span>`:''}
+    ${step.description?`<span class="milestone-note">${esc(step.description)}</span>`:''}
+    ${!step.due&&!step.cutoff&&!step.description?'<small>Dates & notes</small>':''}
+   </summary>
+   <form class="milestone-editor" data-milestone="${esc(step.id)}">
+    <div class="milestone-date-fields">
+     <label class="field">Scheduled date<input name="date" type="date" value="${esc(step.due?.slice(0,10))}"></label>
+     <label class="field">Time (optional)<input name="time" type="time" value="${esc(step.due?.slice(11,16))}"></label>
+    </div>
+    <label class="field">Hard cutoff<input name="cutoff" type="datetime-local" value="${esc(step.cutoff)}"></label>
+    <label class="field">Step notes<textarea name="notes" rows="2" maxlength="4000" placeholder="Add a note…">${esc(step.description)}</textarea></label>
+    <button type="submit" class="primary small">Save step</button>
+   </form>
+  </details>
+  <button data-child="${esc(step.id)}" class="small" aria-label="Open ${esc(step.title)}">${isBoardTask(step)?esc(step.team)+' ↗':'↗'}</button>
+ </div>`;
+}
 function taskDetail(id,focus){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),threads=conversations().filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks);
-openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}<details class="quick-more task-follow-up"><summary>${t.followUp?'Reminder · '+esc(fmt(t.followUp)):'Set reminder'}</summary>${t.status==='Completed'?'':`<div class="actions task-reminders">${reminderButtons()}<button id="custom-reminder">Pick a time</button>${t.followUp?'<button id="clear-reminder">Clear reminder</button>':''}</div>`}</details><details class="quick-more task-checklist" ${children.length?'open':''}><summary>Checklist${children.length?' · '+children.filter(x=>x.status==='Completed').length+'/'+children.length:''}</summary><div class="section-title"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Send to another group</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label></details>`}</div><div class="checklist-items">${children.map(c=>`<div class="checklist-item"><button class="small" data-complete-child="${c.id}" aria-label="Complete ${esc(c.title)}" ${c.status==='Completed'?'disabled':''}>${c.status==='Completed'?'✓':'○'}</button><span>${esc(c.title)}</span>${isBoardTask(c)?`<button data-child="${c.id}" class="small">${esc(c.team)} ↗</button>`:`<button data-child="${c.id}" class="small" aria-label="Edit ${esc(c.title)}">⋯</button>`}</div>`).join('')}</div></details><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Notes${t.notes.length?' · '+t.notes.length:''}</summary>${t.notes.map(n=>`<div class="note">${esc(n.body)}<small>${esc(n.author)} · ${esc(fmt(n.date))}</small></div>`).join('')}<form id="note-form" class="inline-form"><textarea name="note" aria-label="Internal note" required placeholder="Add an internal note…"></textarea><button>Add note</button></form></details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`);
+openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}<details class="quick-more task-follow-up"><summary>${t.followUp?'Reminder · '+esc(fmt(t.followUp)):'Set reminder'}</summary>${t.status==='Completed'?'':`<div class="actions task-reminders">${reminderButtons()}<button id="custom-reminder">Pick a time</button>${t.followUp?'<button id="clear-reminder">Clear reminder</button>':''}</div>`}</details><details class="quick-more task-checklist" ${children.length?'open':''}><summary>Checklist${children.length?' · '+children.filter(x=>x.status==='Completed').length+'/'+children.length:''}</summary><div class="section-title"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Send to another group</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label></details>`}</div><div class="checklist-items">${children.map(step=>checklistItem(step,focus)).join('')}</div></details><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Notes${t.notes.length?' · '+t.notes.length:''}</summary>${t.notes.map(n=>`<div class="note">${esc(n.body)}<small>${esc(n.author)} · ${esc(fmt(n.date))}</small></div>`).join('')}<form id="note-form" class="inline-form"><textarea name="note" aria-label="Internal note" required placeholder="Add an internal note…"></textarea><button>Add note</button></form></details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`);
  bindAttachments();
+ document.querySelectorAll('[data-milestone]').forEach(form=>form.onsubmit=event=>{
+  event.preventDefault();
+  const step=children.find(child=>child.id===form.dataset.milestone);
+  const values=new FormData(form);
+  const date=values.get('date'),time=values.get('time');
+  if(time&&!date)return toast('Choose a scheduled date for this time.');
+  const due=date&&time?date+'T'+time:date;
+  const cutoff=values.get('cutoff'),description=values.get('notes').trim();
+  if(due!==step.due||cutoff!==step.cutoff||description!==step.description){
+   Object.assign(step,{due,cutoff,description});
+   activity(step,'Updated dates and notes');
+   save();render();
+  }
+  taskDetail(id,step.id);
+  toast('Step saved');
+ });
  document.querySelectorAll('[data-source-email]').forEach(button=>button.onclick=()=>openInboxMessage(button.dataset.sourceEmail));
  $('#mark-mail-reviewed')?.addEventListener('click',()=>{t.mailReviewedAt=new Date().toISOString();save();render();taskDetail(id);});
  $('#edit-task').onclick=()=>taskEditor(id);
@@ -409,7 +449,7 @@ const transportTemplates = {
  'Air Import': ['Review pre-alert, AWB and commercial documents', 'Confirm flight arrival and cargo availability', 'Verify carrier and customs release', 'Arrange airport pickup and delivery', 'Record delivery confirmation'],
  'Air Export': ['Confirm airline booking and cargo cutoff', 'Verify pieces, weight, dimensions and shipping documents', 'Confirm applicable screening and export filing', 'Tender cargo and confirm airline acceptance', 'Verify departure and send pre-alert'],
  'Ocean Import': ['Review bill of lading, pre-alert and release instructions', 'Confirm arrival, availability and last free day', 'Verify customs, carrier and terminal releases', 'Arrange pickup and delivery', 'Confirm empty return when applicable'],
- 'Ocean Export': ['Book space and confirm documentation and terminal cutoffs', 'Coordinate equipment pickup and loading', 'Confirm shipping instructions, applicable export filing and VGM', 'Verify terminal gate-in before cutoff', 'Confirm sailing and send final documents'],
+ 'Ocean Export': ['Confirm vessel booking', 'Documentation cutoff · submit shipping instructions', 'Container loading · coordinate equipment and warehouse', 'Confirm applicable export filing and VGM', 'Terminal cutoff · verify gate-in', 'Sailing date · confirm departure and send final documents'],
  'Drayage': ['Confirm container, terminal and last free day', 'Verify releases and equipment needs', 'Book terminal and delivery appointments', 'Dispatch driver and track pickup and delivery', 'Confirm empty return and record interchange receipt'],
 };
 const workflowTemplates = {

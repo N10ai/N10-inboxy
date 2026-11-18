@@ -839,3 +839,14 @@ button { border-color: #fff7; }
 .operator-inbox.mail-index .mail-row strong{font-size:.9rem}
 .operator-inbox.mail-index .mail-row small{color:#65584d}
 .operator-inbox.mail-index .mail-row small time{font-size:.72rem}
+
+.checklist-milestone{min-width:0}
+.checklist-milestone>summary{cursor:pointer;padding:.45rem 0;font-size:.88rem}
+.checklist-milestone>summary strong{font-weight:600;overflow-wrap:anywhere}
+.checklist-milestone>summary small,.milestone-dates,.milestone-note{display:block;font-size:.76rem;margin:.25rem 0 0;color:var(--muted)}
+.milestone-note{white-space:pre-wrap;overflow-wrap:anywhere}
+.milestone-dates.milestone-late{color:#a9422b;font-weight:650}
+.milestone-editor{display:grid;gap:.5rem;padding:.55rem 0 .35rem}
+.milestone-editor input,.milestone-editor textarea{min-width:0;max-width:100%;font-size:16px}
+.milestone-editor>button{justify-self:start}
+.milestone-date-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8rem),1fr));gap:.5rem}

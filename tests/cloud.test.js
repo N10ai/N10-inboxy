@@ -328,3 +328,30 @@ test('quick capture saves and reuses customers and Customers replaces Shipments 
   assert.equal(doc.querySelectorAll('[data-client-task]').length,2);
  }finally{dom.window.close();}
 });
+
+test('Ocean Export checklist saves independent scheduled dates, cutoffs and notes on the parent card',async()=>{
+ const {dom,w,snapshot}=await app(true);
+ try{
+  const doc=w.document;
+  const capture=doc.querySelector('#inline-capture');
+  const submit=form=>form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  capture.elements.title.value='Ocean export OE-75';
+  capture.elements.workflow.value='Ocean Export';
+  capture.elements.workflow.dispatchEvent(new w.Event('change'));
+  submit(capture);
+  doc.querySelector('#task-results .card-open').click();
+  const stepForm=title=>[...doc.querySelectorAll('.checklist-milestone')].find(item=>item.querySelector('summary').textContent.includes(title)).querySelector('form');
+  const docs=stepForm('Documentation cutoff');
+  docs.elements.cutoff.value='2026-11-21T16:00';
+  docs.elements.notes.value='Send shipping instructions to carrier.';
+  submit(docs);
+  const loading=stepForm('Container loading');
+  loading.elements.date.value='2026-11-20';
+  submit(loading);
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks.find(task=>task.title.startsWith('Documentation cutoff')).cutoff,'2026-11-21T16:00');
+  assert.equal(snapshot.tasks.find(task=>task.title.startsWith('Container loading')).due,'2026-11-20');
+  assert.match(doc.querySelector('.checklist-items').textContent,/Send shipping instructions to carrier/);
+  assert.equal(doc.querySelectorAll('#task-results [data-task]').length,1);
+ }finally{dom.window.close();}
+});
