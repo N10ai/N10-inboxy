@@ -875,3 +875,101 @@ button { border-color: #fff7; }
 @media(max-width:760px){
  #app .group-board{grid-template-columns:repeat(var(--group-columns),minmax(230px,76vw))}
 }
+
+/* Shared controls on the workspace, dialogs, and inbox. */
+:root {
+ --control-ink: #302620;
+ --control-muted: #6b5a4e;
+ --control-line: #cdbdaf;
+ --control-surface: #fffcf9;
+ --control-focus: #9c4c32;
+ --control-radius: 10px;
+}
+.control-icon { width: 1.1rem; height: 1.1rem; flex: none; vertical-align: middle; }
+#app :is(input:not([type]),input[type=text],input[type=search],input[type=email],input[type=password],input[type=number],input[type=url],input[type=date],input[type=time],input[type=datetime-local],select,textarea),
+#detail :is(input:not([type]),input[type=text],input[type=search],input[type=email],input[type=password],input[type=number],input[type=url],input[type=date],input[type=time],input[type=datetime-local],select,textarea) {
+ box-sizing: border-box;
+ min-height: 42px;
+ min-width: 0;
+ max-width: 100%;
+ padding: .56rem .72rem;
+ border: 1px solid var(--control-line);
+ border-radius: var(--control-radius);
+ background-color: var(--control-surface);
+ color: var(--control-ink);
+ font: inherit;
+ font-size: .875rem;
+ line-height: 1.3;
+}
+#app :is(input,textarea)::placeholder,#detail :is(input,textarea)::placeholder { color: var(--control-muted); opacity: .85; }
+#app select:not([multiple]),#detail select:not([multiple]) {
+ appearance: none;
+ padding-inline-end: 2rem;
+ background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b5a4e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+ background-repeat: no-repeat;
+ background-size: 1rem;
+ background-position: right .65rem center;
+}
+#app :is(input,select,textarea,button,summary):focus-visible,#detail :is(input,select,textarea,button,summary):focus-visible {
+ outline: 2px solid var(--control-focus);
+ outline-offset: 2px;
+}
+#app input[type=checkbox],#detail input[type=checkbox] { accent-color: var(--control-focus); width: 1rem; height: 1rem; flex: none; }
+#app :is(.capture-submit,.filter-actions button,.view-actions button,.inbox-toolbar button,#mail-back),
+#detail :is(.dialog-footer button,[data-close]) {
+ display: inline-flex; align-items: center; justify-content: center; gap: .38rem;
+ min-height: 42px; border-radius: var(--control-radius); font-size: .875rem; font-weight: 600;
+}
+#app button:disabled,#detail button:disabled { opacity: .56; cursor: default; }
+#app .inline-capture {
+ padding: .85rem; border: 1px solid var(--control-line); border-radius: 15px;
+ background: #fff9; box-shadow: 0 4px 14px #4130250a;
+}
+#app .capture-row { grid-template-columns: minmax(0,1fr) minmax(9rem,13rem) max-content; }
+#app .capture-row > input { grid-column: 1; grid-row: 1; width: 100%; }
+#app .capture-row > .capture-template { grid-column: 2; grid-row: 1; min-width: 0; }
+#app .capture-row > .capture-submit { grid-column: 3; grid-row: 1; padding-inline: .85rem; }
+#app .capture-row [data-workflow-steps]:not([hidden]) { grid-row: 2; }
+.capture-extras { display: flex; flex-wrap: wrap; align-items: start; gap: .4rem; margin-top: .5rem; }
+.capture-extras > details { margin: 0; border: 0; min-width: 0; }
+.capture-extras > details[open] { flex-basis: 100%; }
+#app .capture-extras summary {
+ display: inline-flex; align-items: center; list-style: none; gap: .22rem; cursor: pointer;
+ min-height: 34px; margin: 0; padding: .25rem .45rem; border: 1px solid transparent;
+ border-radius: 8px; background: transparent; color: var(--control-muted); font-size: .8rem; font-weight: 600;
+}
+#app .capture-extras summary:hover { border-color: var(--control-line); background: var(--control-surface); }
+#app .capture-extras summary::-webkit-details-marker { display: none; }
+#app .capture-description textarea { margin-top: .4rem; }
+#app .toolbar .segments button[data-view] { display: inline-flex; align-items: center; gap: .3rem; white-space: nowrap; font-size: .8rem; min-height: 36px; }
+#app .toolbar .segments .control-icon { width: .95rem; height: .95rem; }
+#app #workspace-filter-toggle { border: 1px solid var(--control-line); border-radius: var(--control-radius); }
+#app #workspace-filter-toggle[aria-expanded=true] { background: #f0e3d8; box-shadow: none; color: var(--control-ink); }
+#app .workspace-filters { background: #fff9; border: 1px solid var(--control-line); border-radius: 14px; padding: .8rem; }
+.workspace-filters h2 { font-size: .95rem; margin: 0 0 .6rem; color: var(--control-ink); }
+#app .filter-grid,.planning-bar {
+ display: grid; grid-template-columns: repeat(auto-fit,minmax(9rem,1fr)); gap: .5rem; align-items: stretch;
+}
+.planning-bar { grid-column: 1 / -1; margin: 0; }
+#app .workspace-filters select,#app .workspace-filters input { width: 100%; min-width: 0; }
+.filter-entry { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+.filter-entry span { font-size: .72rem; color: var(--control-muted); }
+.view-actions { grid-column: 1 / -1; }
+.filter-actions { margin-top: .55rem; padding-top: .55rem; border-top: 1px solid var(--control-line); }
+#app .inbox-toolbar { display: grid; grid-template-columns: minmax(0,1fr) minmax(7rem,auto) auto; gap: .5rem; }
+#app .inbox-toolbar input { width: 100%; }
+#inbox-sync-state { grid-column: 1 / -1; color: var(--control-muted); font-size: .8rem; }
+#app .operator-inbox.mail-index .mail-select-row { border-color: var(--control-line); border-radius: 12px; }
+#app .operator-inbox.mail-index .mail-row { padding: .75rem .95rem; }
+#app .operator-inbox.mail-index .mail-row strong { color: var(--control-ink); line-height: 1.4; }
+@media(max-width:600px){
+ #app :is(input:not([type=checkbox]),select,textarea),#detail :is(input:not([type=checkbox]),select,textarea) { font-size: 16px; }
+ #app .capture-row { grid-template-columns: minmax(0,1fr) auto; }
+ #app .capture-row > .capture-template { grid-column: 1 / -1; grid-row: 2; }
+ #app .capture-row > .capture-submit { grid-column: 2; grid-row: 1; }
+ #app .capture-row [data-workflow-steps]:not([hidden]) { grid-row: 3; }
+ #app .filter-grid,.planning-bar { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ #app .filter-grid .filter-entry { display: grid; gap: .15rem; }
+ #app .toolbar .segments button[data-view] { padding-inline: .55rem; }
+ #app .toolbar .segments button[data-view]:not(.active) .control-icon { display: none; }
+}
