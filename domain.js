@@ -1,3 +1,4 @@
+import {dueTime} from './planning.js';
 export const TEAMS = ['Ops','Warehouse','Accounting','Pricing'];
 export const STATUSES = ['Up next','In progress','Waiting','Ready to bill','Completed'];
 export const USERS = ['Unassigned','Ignacio','Sofia','Carlos','Emma','Daniel'];
@@ -12,12 +13,20 @@ export function completionIssue(task, tasks) {
 export function priority(task, tasks, now = new Date()) {
  if(task.status==='Completed') return {score:-1,reasons:['Completed']};
  let score={Urgent:80,High:45,Normal:15,Low:0}[task.priority]??15; const reasons=[];
- const due=task.due?new Date(task.due).getTime():null;
+ const due=task.due?dueTime(task.due):null;
  if(due && due < +now){score+=100;reasons.push('Overdue');}
  else if(due && due- +now<=86400000){score+=55;reasons.push('Due within 24h');}
  if(task.followUp && +new Date(task.followUp)<= +now){score+=65;reasons.push('Follow-up due');}
  if(task.owner==='Unassigned'){score+=25;reasons.push('Needs owner');}
- if(task.impact){score+=35;reasons.push('Operational impact');}
+ const cutoff=task.cutoff?dueTime(task.cutoff):null;
+ if(cutoff && cutoff<=+now){score+=145;reasons.push('Cutoff passed');}
+ else if(cutoff && cutoff- +now<=86400000){
+  const minutes=Math.ceil((cutoff- +now)/60000);
+  score+=minutes<=60?125:85;
+  reasons.push('Cutoff in '+(minutes<=60?minutes+' min':Math.ceil(minutes/60)+' hr'));
+ }
+ if(task.consequence||task.impact){score+=35;reasons.push(task.consequence||'Operational impact');}
+ if(task.priorityOverride)reasons.push(task.priority+' · manual');
  const dependents=tasks.filter(t=>t.dependencies.includes(task.id)&&t.status!=='Completed').length;
  if(dependents){score+=30;reasons.push(`Blocks ${dependents} task${dependents>1?'s':''}`);}
  if(blockedBy(task,tasks).length) reasons.push('Blocked');

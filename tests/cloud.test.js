@@ -198,3 +198,47 @@ test('workspace access can add the same teammate to the assignment list',async()
   assert.equal(snapshot.people[0].name,'Dispatch teammate');
  }finally{dom.window.close();}
 });
+
+test('Gmail conversation supports independent actions, review, assignment, completion and bulk Trash',async()=>{
+ const initial={id:'mail-a',taskId:null,threadId:'thread-a',connectionId:'gmail-1',provider:'gmail',date:'2026-11-18T10:00:00Z',from:'Dispatch <dispatch@client.invalid>',subject:'Shipment: OPS-7',body:'Please book pickup.\nPlease confirm inventory.\nCutoff: 2026-11-18 16:00'};
+ const operation={id:'operation-a',reference:'OPS-7',customer:'Client',route:'Miami',container:'',publicStatus:'Request received',publicUpdate:'',nextUpdate:''};
+ const unrelated={...initial,id:'mail-b',threadId:'thread-b',subject:'Thanks',body:'Thanks, received.'};
+ const update={...initial,id:'mail-c',threadId:'thread-c',subject:'Shipment: OPS-7',body:'Please reschedule pickup.\nCutoff: 2026-11-18 18:00'};
+ const {dom,w,snapshot}=await app(true,{emails:[initial,unrelated,update],shipments:[operation],
+  people:[{id:'operator',name:'Operator',email:'operator@example.invalid',role:'Admin'}]});
+ try{
+  const doc=w.document;
+  const click=selector=>doc.querySelector(selector).click();
+  const submit=selector=>doc.querySelector(selector).dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  click('[data-page="inbox"]');click('[data-email="mail-a"]');
+  for(const index of [0,1]){
+   click('[data-new-request="'+index+'"]');
+   click('[name="applySuggestions"]');
+   if(index===0)doc.querySelector('#inline-capture [name=title]').value='Book confirmed pickup';
+   submit('#inline-capture');click('[data-close]');
+  }
+  click('[data-email="mail-c"]');click('[data-review-request="0"]');
+  assert.match(doc.querySelector('#proposed-updates').textContent,/Current: 2026-11-18T16:00/);
+  click('[data-confirm-change="cutoff"]');click('#apply-mail-update');
+  click('[data-close]');click('[data-page="workspace"]');click('[data-view="List"]');
+  const [first,second]=[...doc.querySelectorAll('#task-results [data-task]')].map(row=>row.dataset.task).reverse();
+  click('[data-task="'+first+'"] [data-claim]');
+  const status=doc.querySelector('[data-task="'+first+'"] [data-row-field="status"]');
+  status.value='Completed';status.dispatchEvent(new w.Event('change'));
+  click('[data-page="inbox"]');
+  click('[data-select-mail="gmail-1:thread-a"]');
+  click('[data-select-mail="gmail-1:thread-b"]');
+  click('#bulk-mail-action');click('[data-mail-filter="Trash"]');
+  assert.equal(doc.querySelectorAll('.mail-row').length,2);
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks.length,2);
+  assert.equal(snapshot.tasks.find(t=>t.id===first).owner,'Operator');
+  assert.equal(snapshot.tasks.find(t=>t.id===first).status,'Completed');
+  assert.equal(snapshot.tasks.find(t=>t.id===second).status,'Up next');
+  assert.ok(snapshot.tasks.every(t=>t.shipmentId===operation.id));
+  assert.ok(snapshot.tasks.some(t=>t.title==='Book confirmed pickup'));
+  assert.equal(snapshot.emails.find(m=>m.id==='mail-a').taskIds.length,2);
+  assert.equal(snapshot.tasks.filter(t=>t.cutoff==='2026-11-18T18:00').length,1);
+  assert.equal(snapshot.emails.filter(m=>m.deletedAt).length,2);
+ }finally{dom.window.close();}
+});
