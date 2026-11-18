@@ -488,3 +488,25 @@ test('desktop-style selection archives without entering selection mode and task 
   assert.equal(dialog.open,false);
  }finally{dom.window.close();}
 });
+
+test('desktop quick actions and compact task editor open the intended controls',async()=>{
+ const {dom,w}=await app(true);
+ try{
+  const doc=w.document;
+  doc.querySelector('#quick-search').click();
+  assert.equal(doc.activeElement,doc.querySelector('#search'));
+  doc.querySelector('#quick-capture-email').click();
+  assert.ok(doc.querySelector('#email-form'));
+  doc.querySelector('[data-close]').click();
+  doc.querySelector('#quick-add').click();
+  const form=doc.querySelector('#inline-capture');
+  assert.equal(doc.activeElement,form.elements.title);
+  form.elements.title.value='PU 200';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  doc.querySelector('.card-open').click();
+  assert.ok(doc.querySelector('.task-tools'));
+  assert.equal(doc.querySelector('#checklist-add-editor').hidden,true);
+  doc.querySelector('#show-checklist-add').click();
+  assert.equal(doc.activeElement,doc.querySelector('#inline-subtask input'));
+ }finally{dom.window.close();}
+});
