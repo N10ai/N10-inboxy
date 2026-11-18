@@ -862,3 +862,16 @@ button { border-color: #fff7; }
 .board-description{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .operation-card .group-chip{background:transparent;border:0;padding:0 .15rem;color:inherit;font:inherit;text-decoration:underline;text-underline-offset:.16em}
 .capture-description textarea{display:block;width:100%;min-width:0;padding:.5rem;border:1px solid var(--border);border-radius:.5rem;font-size:16px}
+
+#app .group-board{grid-template-columns:repeat(var(--group-columns),minmax(250px,1fr))}
+.group-board-heading{margin-bottom:.75rem;padding:.15rem .2rem}
+.group-board-heading h2{margin:.15rem 0 .45rem;font-size:1rem;overflow-wrap:anywhere}
+.group-board-heading>div{display:flex;flex-wrap:wrap;gap:.35rem .6rem;font-size:.75rem;color:var(--muted)}
+.group-completed-count,.group-completed h3{color:#32614a}
+.group-completed{border-top:1px solid var(--border);padding-top:.3rem;margin-top:.75rem}
+.group-completed h3{font-size:.77rem;margin:.45rem 0 .7rem}
+.group-board .is-complete{border-top-color:#5c886f}
+.group-board-empty{font-size:.8rem;color:var(--muted);margin:.5rem .2rem}
+@media(max-width:760px){
+ #app .group-board{grid-template-columns:repeat(var(--group-columns),minmax(230px,76vw))}
+}

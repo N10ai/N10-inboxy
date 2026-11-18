@@ -387,3 +387,30 @@ test('a completed checklist step can be unchecked and reopens its completed pare
   assert.equal(snapshot.tasks.find(task=>task.title==='AE 1052').description,'Send the air export documents');
  }finally{dom.window.close();}
 });
+
+test('Groups board puts cards in their group columns and shows completion in each column',async()=>{
+ const groups=[{id:'ops',name:'Ops',description:'',members:[]},{id:'warehouse',name:'Warehouse',description:'',members:[]}];
+ const {dom,w,snapshot}=await app(true,{groups});
+ try{
+  const doc=w.document;
+  const create=title=>{
+   const form=doc.querySelector('#inline-capture');
+   form.elements.title.value=title;
+   form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  };
+  create('AE 1052');
+  doc.querySelector('[data-team="Warehouse"]').click();
+  create('PU 741');
+  doc.querySelector('[data-view="Groups"]').click();
+  const column=name=>doc.querySelector('.group-board [aria-label="'+name+'"]');
+  assert.match(column('Ops').textContent,/AE 1052/);
+  assert.match(column('Warehouse').textContent,/PU 741/);
+  const move=column('Warehouse').querySelector('[data-move]');
+  move.value='Completed';
+  move.dispatchEvent(new w.Event('change'));
+  assert.match(column('Warehouse').querySelector('.group-completed').textContent,/PU 741/);
+  assert.match(column('Warehouse').querySelector('.group-board-heading').textContent,/0 open.*1 completed/s);
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks.find(task=>task.title==='PU 741').status,'Completed');
+ }finally{dom.window.close();}
+});
