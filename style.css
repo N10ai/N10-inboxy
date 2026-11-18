@@ -1055,13 +1055,13 @@ button { border-color: #fff7; }
 #detail.task-dialog .task-checklist:not([open])>:not(summary){display:none}
 .desktop-actions{display:none}
 @media(min-width:761px){
- #app .shell{grid-template-columns:136px minmax(0,1fr);gap:13px}
+ #app .shell{grid-template-columns:154px minmax(0,1fr);gap:13px}
  #app .sidebar{padding:8px;border-radius:15px}
  #app .sidebar .nav{gap:3px}
  #app .sidebar .nav>button{min-height:30px;font-size:.71rem;gap:.3rem}
  #app .sidebar .nav>button svg{width:14px;height:14px}
  #app .sidebar .sidebar-group-row [data-team]{flex:1 1 auto;width:auto;min-width:0;padding:3px 4px;gap:.3rem}
- #app .sidebar .sidebar-group-row [data-team]>span{display:block;flex:1 1 auto;min-width:0;text-align:left}
+ #app .sidebar .sidebar-group-row [data-team]>span{display:block;flex:1 1 auto;min-width:0;text-align:left;white-space:normal;overflow-wrap:anywhere;line-height:1.2}
  #app .sidebar .sidebar-group-row [data-team]>small{flex:none}
  #app .sidebar .sidebar-group-edit{width:23px;flex:0 0 23px}
  #app .glass-dock{display:none}
