@@ -74,3 +74,32 @@ test('FTZ filter includes admissions and their steps, and the reference is searc
   assert.deepEqual([...doc.querySelectorAll('#task-results [data-task]')].map(row=>row.dataset.task),[admission.id]);
  } finally {dom.window.close();}
 });
+
+test('custom FTZ steps are used for new tasks and follow-up queue isolates active work', async () => {
+ const {dom,w,snapshot}=await app(true);
+ try {
+  const doc=w.document;
+  const submit=form=>form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  doc.querySelector('#customize-ftz').click();
+  const editor=doc.querySelector('#ftz-template-form');
+  editor.elements.steps.value='Check carrier tally\nConfirm warehouse receipt';
+  submit(editor);
+  doc.querySelector('[data-close]').click();
+  doc.querySelector('#new-task').click();
+  const task=doc.querySelector('#quick-task-form');
+  task.elements.title.value='Follow up on admission';
+  task.elements.workflow.value='FTZ · Admission (214)';
+  task.elements.workflow.dispatchEvent(new w.Event('change'));
+  task.elements.followUp.value='2020-01-01T09:00';
+  submit(task);
+  await new Promise(resolve=>setTimeout(resolve,100));
+  const parent=snapshot.tasks.find(record=>record.title==='Follow up on admission');
+  assert.deepEqual(snapshot.tasks.filter(record=>record.parentId===parent.id).map(step=>[step.stepOrder,step.title]),[
+   [0,'Check carrier tally'],[1,'Confirm warehouse receipt'],
+  ]);
+  const queue=doc.querySelector('#work-queue');
+  queue.value='Follow-up due';
+  queue.dispatchEvent(new w.Event('change'));
+  assert.deepEqual([...doc.querySelectorAll('#task-results [data-task]')].map(row=>row.dataset.task),[parent.id]);
+ } finally {dom.window.close();}
+});
