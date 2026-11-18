@@ -77,6 +77,16 @@ export function moveTask(tasks, id, status, beforeId=null) {
  return '';
 }
 
+// Checklist steps follow their parent's group until they are assigned elsewhere.
+export function setTaskGroup(tasks, task, group) {
+ const previous=task.team;
+ if(previous===group)return;
+ task.team=group;
+ for(const step of tasks){
+  if(step.parentId===task.id&&step.team===previous)setTaskGroup(tasks,step,group);
+ }
+}
+
 export function removeGroup(workspace,groupId,targetId){
  const group=workspace.groups.find(g=>g.id===groupId);
  if(!group)throw Error('Group not found.');
