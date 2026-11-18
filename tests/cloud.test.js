@@ -378,10 +378,10 @@ test('a completed checklist step can be unchecked and reopens its completed pare
   step.elements.title.value='Send the draft AWB';
   submit(step);
   doc.querySelector('[data-complete-child]').click();
-  assert.equal(doc.querySelector('[data-complete-child]').getAttribute('aria-pressed'),'true');
+  assert.equal(doc.querySelector('[data-complete-child]').checked,true);
   doc.querySelector('#complete-task').click();
   doc.querySelector('[data-complete-child]').click();
-  assert.equal(doc.querySelector('[data-complete-child]').getAttribute('aria-pressed'),'false');
+  assert.equal(doc.querySelector('[data-complete-child]').checked,false);
   await new Promise(resolve=>setTimeout(resolve,100));
   assert.ok(snapshot.tasks.every(task=>task.status==='Up next'));
   assert.equal(snapshot.tasks.find(task=>task.title==='AE 1052').description,'Send the air export documents');
@@ -451,5 +451,40 @@ test('checklist steps inherit their group even with an assigned member and only 
   doc.querySelector('[data-child="'+warehouse.id+'"]').click();
   change(doc.querySelector('.task-assignment select[name="team"]'),'Billing');
   assert.equal(cards().length,1);
+ }finally{dom.window.close();}
+});
+
+test('desktop-style selection archives without entering selection mode and task cards dismiss on the backdrop',async()=>{
+ const mail={id:'mail-archive',threadId:'a',from:'sender@example.test',subject:'Archive test',body:'Hello',date:'2026-11-18T08:00:00'};
+ const {dom,w}=await app(true,{emails:[mail]});
+ try{
+  const doc=w.document;
+  doc.querySelector('[data-page="inbox"]').click();
+  const checkbox=doc.querySelector('[data-select-mail]');
+  assert.equal(checkbox.hidden,false);
+  checkbox.click();
+  doc.querySelector('#bulk-email-archive').click();
+  assert.equal(doc.querySelector('[data-email="mail-archive"]'),null);
+  const folder=doc.querySelector('#mail-folder');
+  folder.value='Archived';
+  folder.dispatchEvent(new w.Event('change'));
+  assert.ok(doc.querySelector('[data-email="mail-archive"]'));
+
+  doc.querySelector('[data-page="workspace"]').click();
+  const rename=doc.querySelector('[data-rename-group]');
+  rename.click();
+  const group=doc.querySelector('.sidebar-group-form');
+  group.querySelector('input').value='Export';
+  group.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  doc.querySelector('[data-team="Export"]').click();
+  const form=doc.querySelector('#inline-capture');
+  form.elements.title.value='AE 1052';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  doc.querySelector('.card-open').click();
+  const dialog=doc.querySelector('#detail');
+  assert.ok(dialog.open);
+  dialog.dispatchEvent(new w.MouseEvent('pointerdown',{clientX:20,clientY:20}));
+  dialog.dispatchEvent(new w.MouseEvent('click',{clientX:20,clientY:20}));
+  assert.equal(dialog.open,false);
  }finally{dom.window.close();}
 });
