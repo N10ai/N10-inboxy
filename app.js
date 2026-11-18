@@ -1,6 +1,6 @@
 import {defaultTypes,priorities,taskLinks,deadline,dateOnly,dueTime,isActionable,mailSuggestions,suggestTaskType,relatedTaskIds} from './planning.js';
 import {cloud,startCloud,saveCloud,refreshCloud,logout,accessPanel,mailAction} from './cloud.bundle.js?v=3';
-import {TEAMS as DEFAULT_TEAMS,STATUSES,USERS as DEFAULT_USERS,uid,seed,priority,blockedBy,completionIssue,customerSnapshot,parseEmail,moveTask,removeGroup} from './domain.js?v=6';
+import {TEAMS as DEFAULT_TEAMS,STATUSES,USERS as DEFAULT_USERS,uid,seed,priority,blockedBy,completionIssue,customerSnapshot,parseEmail,moveTask,removeGroup,setTaskGroup} from './domain.js?v=7';
 const KEY='inboxy.workspace.v1';
 let state;try{state=JSON.parse(localStorage.getItem(KEY))||seed();if(state.version!==1||!Array.isArray(state.tasks))throw Error();}catch{state=seed();}
 function migrateWorkspace(data){
@@ -56,7 +56,7 @@ function reminderButtons(){
 }
 function isBoardTask(task){
  const parent=state.tasks.find(item=>item.id===task.parentId);
- return !parent||task.delegated||task.team!==parent.team;
+ return !parent||task.team!==parent.team;
 }
 function handoffParent(task){
  if(!task.parentId||!isBoardTask(task))return null;
@@ -248,9 +248,9 @@ openDialog('Task',`${taskProperties(t)}${t.parentId?`<p><button class="linkbutto
    if(key==='status'){
     const issue=moveTask(state.tasks,id,value);
     if(issue){control.value=t.status;return toast(issue);}
-   }else t[key]=value;
+   }else if(key==='team')setTaskGroup(state.tasks,t,value);
+   else t[key]=value;
    if(key==='priority')t.priorityOverride=true;
-   if(key==='owner'&&t.parentId)t.delegated=value!=='Unassigned';
    activity(t,'Updated '+control.labels[0].textContent.trim().split(/\s+/).slice(0,key==='nextAction'?2:1).join(' ').toLowerCase());
    save();render();
    if(key==='status'||key==='owner'||key==='team'){taskDetail(id);return;}
@@ -304,7 +304,6 @@ const updateReminder=value=>{
   const group=event.target.elements['step-team'].value;
   const member=event.target.elements['step-owner'].value;
   const step=newTaskRecord({title,parentId:id,shipmentId:t.shipmentId,team:group||t.team,owner:member||(group?'Unassigned':t.owner),clientId:t.clientId,customer:taskCustomer(t)});
-  if(member&&member!=='Unassigned')step.delegated=true;
   state.tasks.push(step);
   activity(t,'Subtask added');save();render();taskDetail(id);$('#inline-subtask input')?.focus();
  });$('#parent-task')?.addEventListener('click',()=>taskDetail(t.parentId));document.querySelectorAll('[data-complete-child]').forEach(button=>button.onclick=()=>{
@@ -719,8 +718,9 @@ function editCardValue(button){
   if(event.key==='Enter')editor.blur();
  };
  editor.onchange=()=>{
-  task[key]=editor.value.trim();
-  if(key==='owner'&&task.parentId)task.delegated=task.owner!=='Unassigned';
+  const value=editor.value.trim();
+  if(key==='team')setTaskGroup(state.tasks,task,value);
+  else task[key]=value;
   activity(task,'Updated '+({nextAction:'next action',due:'requested date',cutoff:'hard cutoff'}[key]||key));
   save();render();
  };
@@ -951,8 +951,8 @@ function editRows(ids,key,value){
   if(key==='status'){
    const issue=moveTask(state.tasks,id,value);
    if(issue){skipped.push(task.title+' · '+issue);continue;}
-  }else task[key]=value.trim();
-  if(key==='owner'&&task.parentId)task.delegated=task.owner!=='Unassigned';
+  }else if(key==='team')setTaskGroup(state.tasks,task,value);
+  else task[key]=value.trim();
   if(key==='priority')task.priorityOverride=true;
   activity(task,'Updated '+(key==='waitingOn'?'waiting on':key));
  }

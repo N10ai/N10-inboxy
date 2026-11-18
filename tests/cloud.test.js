@@ -414,3 +414,42 @@ test('Groups board puts cards in their group columns and shows completion in eac
   assert.equal(snapshot.tasks.find(task=>task.title==='PU 741').status,'Completed');
  }finally{dom.window.close();}
 });
+
+test('checklist steps inherit their group even with an assigned member and only other groups get cards',async()=>{
+ const groups=['Ops','Warehouse','Billing'].map(name=>({id:name.toLowerCase(),name,description:'',members:[]}));
+ const {dom,w,snapshot}=await app(true,{groups,people:[{id:'operator',name:'Ana',email:'operator@example.invalid',role:'Admin'}]});
+ try{
+  const doc=w.document;
+  const submit=form=>form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  const change=(select,value)=>{select.value=value;select.dispatchEvent(new w.Event('change'));};
+  const cards=()=>[...doc.querySelectorAll('#task-results [data-task]')];
+  const capture=doc.querySelector('#inline-capture');
+  capture.elements.title.value='AE 1052';
+  submit(capture);
+  cards()[0].querySelector('.card-open').click();
+
+  let step=doc.querySelector('#inline-subtask');
+  step.elements.title.value='Prepare documents';
+  step.elements['step-owner'].value='Ana';
+  submit(step);
+  assert.equal(cards().length,1);
+
+  step=doc.querySelector('#inline-subtask');
+  step.elements.title.value='Count cargo';
+  step.elements['step-team'].value='Warehouse';
+  submit(step);
+  assert.equal(cards().length,2);
+
+  change(doc.querySelector('.task-assignment select[name="team"]'),'Billing');
+  await new Promise(resolve=>setTimeout(resolve,100));
+  const paperwork=snapshot.tasks.find(task=>task.title==='Prepare documents');
+  const warehouse=snapshot.tasks.find(task=>task.title==='Count cargo');
+  assert.equal(paperwork.team,'Billing');
+  assert.equal(paperwork.owner,'Ana');
+  assert.equal(warehouse.team,'Warehouse');
+
+  doc.querySelector('[data-child="'+warehouse.id+'"]').click();
+  change(doc.querySelector('.task-assignment select[name="team"]'),'Billing');
+  assert.equal(cards().length,1);
+ }finally{dom.window.close();}
+});
