@@ -57,7 +57,7 @@ Deno.serve(async req=>{
  if(c.user_id!==user.id&&!['owner','admin'].includes(role))throw Error('Only the mailbox owner or a workspace admin can disconnect it');
  await db('disconnect',{connection:c.id});return json({disconnected:true});
  }
- if(c.user_id!==user.id)throw Error('Only the connected mailbox owner can sync or send');
+ if(c.user_id!==user.id)throw Error('Only the connected mailbox owner can sync, send, or download provider attachments');
  const token=await accessToken(c);
  if(input.action==='sync'){
  let messages=[],nextCursor=null;const max=25;const cursor=typeof input.cursor==='string'&&input.cursor.length<10000?input.cursor:null;
@@ -69,6 +69,18 @@ Deno.serve(async req=>{
  nextCursor=list['@odata.nextLink']||null;for(const m of list.value||[])messages.push(outlookRecord(m,c.id,'mail-'+await hash(c.id+':'+m.id)));
  }
  const result=await db('ingest',{connection:c.id,messages});return json({...result,limit:max,nextCursor,scope:'Inbox messages are imported in batches of 25. Use Load older for earlier messages.'});
+ }
+ if(input.action==='attachment'){
+ const original=await checked(await service.from('emails').select('data').eq('workspace_id',c.workspace_id).eq('id',input.email).maybeSingle());
+ const index=input.index;
+ const file=Number.isInteger(index)&&index>=0?original?.data.attachments?.[index]:null;
+ if(c.provider!=='gmail'||!file||original.data.connectionId!==c.id)throw Error('Attachment not found in this mailbox');
+ if(file.size>8*1024*1024)throw Error('Open Gmail to download attachments larger than 8 MB');
+ const base='https://gmail.googleapis.com/gmail/v1/users/me/messages/';
+ const path=encodeURIComponent(original.data.providerMessageId)+'/attachments/'+encodeURIComponent(file.id);
+ const attachment=await providerFetch(base+path,token);
+ if(typeof attachment?.data!=='string')throw Error('Gmail did not return attachment data');
+ return json({name:file.name,data:attachment.data});
  }
  if(input.action==='reply'){
  const original=await checked(await service.from('emails').select('data').eq('workspace_id',c.workspace_id).eq('id',input.email).maybeSingle());

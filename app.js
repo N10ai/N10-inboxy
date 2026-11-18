@@ -1,8 +1,11 @@
+import {defaultTypes,priorities,taskLinks,deadline,dateOnly,dueTime,isActionable,mailSuggestions,suggestTaskType,relatedTaskIds} from './planning.js';
 import {cloud,startCloud,saveCloud,refreshCloud,logout,accessPanel,mailAction} from './cloud.bundle.js?v=3';
-import {TEAMS as DEFAULT_TEAMS,STATUSES,USERS as DEFAULT_USERS,uid,seed,priority,blockedBy,completionIssue,customerSnapshot,parseEmail,moveTask,removeGroup} from './domain.js?v=5';
+import {TEAMS as DEFAULT_TEAMS,STATUSES,USERS as DEFAULT_USERS,uid,seed,priority,blockedBy,completionIssue,customerSnapshot,parseEmail,moveTask,removeGroup} from './domain.js?v=6';
 const KEY='inboxy.workspace.v1';
 let state;try{state=JSON.parse(localStorage.getItem(KEY))||seed();if(state.version!==1||!Array.isArray(state.tasks))throw Error();}catch{state=seed();}
 function migrateWorkspace(data){
+ data.clients ??= [];
+ data.taskTypes ??= [...defaultTypes];
  data.groups ??= DEFAULT_TEAMS.map((name,i)=>({id:'group-'+i,name,description:({Ops:'Coordinate requests and shipment handoffs',Warehouse:'Prepare cargo and complete physical work',Accounting:'Charges, invoices and follow-ups',Pricing:'Quotes, rates and approvals'})[name],members:DEFAULT_USERS.filter(n=>n!=='Unassigned'&&data.tasks.some(t=>t.team===name&&t.owner===n))}));
  data.people ??= DEFAULT_USERS.filter(n=>n!=='Unassigned').map((name,i)=>({id:'person-'+i,name,email:'',role:i===0?'Admin':'Member'}));
  return data;
@@ -12,13 +15,15 @@ let TEAMS=[],USERS=[];
 function syncDirectory(){TEAMS=state.groups.map(g=>g.name);USERS=['Unassigned',...state.people.map(p=>p.name)];}
 syncDirectory();
 let ftzOnly=false, workQueue='';
-let customerFilter='',statusFilter='',dueFilter='';
+let customerFilter='',statusFilter='',dueFilter='',typeFilter='',priorityFilter='',operationFilter='',scope='All tasks',groupBy='None';
+const selectedTasks=new Set(),selectedThreads=new Set();
+let mailActionDraft=null;
 let inboxFilter='Inbox',mailQuery='';
 let captureStatus='Up next',captureEmailId='';
 let page='workspace',view='Board',team='All teams',owner='All owners',query='',attention=false,selectedEmail=state.emails[0]?.id;
 const $=s=>document.querySelector(s);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const initials=s=>s==='Unassigned'?'?':s.slice(0,2).toUpperCase();
-const fmt=s=>s?new Date(s).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'No date';
+const fmt=s=>!s?'No date':dateOnly(s)?new Date(s+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'}):new Date(s).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
 const shipment=id=>state.shipments.find(s=>s.id===id);
 const options=(values,current)=>values.map(v=>`<option ${v===current?'selected':''}>${esc(v)}</option>`).join('');
 function toast(s){const dialog=$('#detail');if(dialog.open){let message=dialog.querySelector('[data-feedback]');if(!message){message=document.createElement('div');message.dataset.feedback='true';message.className='notice';message.setAttribute('role','status');dialog.querySelector('.dialog-head').after(message);}message.textContent=s;}$('#toast').textContent=s;$('#toast').style.display='block';clearTimeout(window.toastTimer);window.toastTimer=setTimeout(()=>$('#toast').style.display='none',3800);}
@@ -26,25 +31,18 @@ function save(){if(cloud.workspace){saveCloud(state,cloudSaveError);return true;
 function activity(t,text){t.activity.unshift({text,date:new Date().toISOString()});}
 function openDialog(title,body,footer=''){const d=$('#detail');d.innerHTML=`<div class="dialog-head"><h2>${title}</h2><button data-close aria-label="Close dialog">✕</button></div><div class="dialog-body">${body}</div>${footer?`<div class="dialog-footer">${footer}</div>`:''}`;if(!d.open)d.showModal();d.querySelector('[data-close]').onclick=()=>d.close();}
 const workQueues={
- 'Due within 24h':(task,now)=>task.due&&+new Date(task.due)<=now+86400000,
- 'Overdue':(task,now)=>task.due&&+new Date(task.due)<now,
+ 'Due within 24h':(task,now)=>deadline(task)&&dueTime(deadline(task))<=now+86400000,
+ 'Overdue':(task,now)=>deadline(task)&&dueTime(deadline(task))<now,
  'Follow-up due':(task,now)=>task.followUp&&+new Date(task.followUp)<=now,
  'Waiting':task=>task.status==='Waiting',
  'Blocked':task=>blockedBy(task,state.tasks).length>0,
  'Unassigned':task=>task.owner==='Unassigned',
 };
 function taskCustomer(task){
- return task.customer||shipment(task.shipmentId)?.customer||'';
+ return state.clients.find(c=>c.id===(task.clientId||shipment(task.shipmentId)?.clientId))?.name||task.customer||shipment(task.shipmentId)?.customer||'';
 }
 function taskReferences(task){
  return [task.ourReference,task.customerReference,task.ftzReference,shipment(task.shipmentId)?.reference].filter(Boolean);
-}
-function logisticsFields(task={}){
- return [
-  ['customer','Customer','Customer or account name'],
-  ['ourReference','Our reference','Job or shipment number'],
-  ['customerReference','Customer reference','PO or customer job number'],
- ].map(([name,label,hint])=>`<label class="field">${label}<input name="${name}" maxlength="120" value="${esc(task[name])}" placeholder="${hint}"></label>`).join('');
 }
 function reminderValue(preset,now=new Date()){
  const date=new Date(now);
@@ -59,14 +57,18 @@ function reminderButtons(){
 function filtered(){
  const now=Date.now(),search=query.trim().toLowerCase(),subjects=new Map();
  if(search)for(const email of state.emails){
-  if(email.taskId)subjects.set(email.taskId,[...(subjects.get(email.taskId)||[]),email.subject]);
+  for(const id of taskLinks(email))subjects.set(id,[...(subjects.get(id)||[]),email.subject]);
  }
  return state.tasks.filter(t=>(team==='All teams'||t.team===team)&&(owner==='All owners'||t.owner===owner)
+ &&(scope!=='My next actions'||(t.owner===myOwner()&&isActionable(t,now)))
+ &&(!typeFilter||t.taskType===typeFilter)
+ &&(!priorityFilter||t.priority===priorityFilter)
+ &&(!operationFilter||t.shipmentId===operationFilter)
  &&(!ftzOnly||isFtzTask(t))
  &&(!workQueue||(t.status!=='Completed'&&workQueues[workQueue](t,now)))
  &&(!customerFilter||taskCustomer(t)===customerFilter)
  &&(!statusFilter||t.status===statusFilter)
- &&(!dueFilter||t.due?.slice(0,10)===dueFilter)&&(!search||[t.title,t.nextAction,t.description,t.workflow,taskCustomer(t),...taskReferences(t),...(subjects.get(t.id)||[])].join(' ').toLowerCase().includes(search))&&(!attention||priority(t,state.tasks).reasons.some(r=>['Overdue','Follow-up due','Needs owner'].includes(r)))).sort((a,b)=>priority(b,state.tasks).score-priority(a,state.tasks).score);}
+ &&(!dueFilter||[t.cutoff,t.due].some(date=>date?.slice(0,10)===dueFilter))&&(!search||[t.title,t.nextAction,t.description,t.workflow,taskCustomer(t),...taskReferences(t),...(subjects.get(t.id)||[])].join(' ').toLowerCase().includes(search))&&(!attention||priority(t,state.tasks).reasons.some(r=>['Overdue','Follow-up due','Needs owner'].includes(r)))).sort((a,b)=>priority(b,state.tasks,now).score-priority(a,state.tasks,now).score||(dueTime(deadline(a))-dueTime(deadline(b))));}
 function render(){
 const currentComposer=$('#inline-capture');
 const captureDraft=currentComposer&&{
@@ -76,12 +78,12 @@ const captureDraft=currentComposer&&{
  steps:[...currentComposer.querySelectorAll('[name=workflowStep]')].map(input=>input.checked),
 };
 const active=state.tasks.filter(t=>t.status!=='Completed');
-$('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass-welcome"><span class="avatar">N10</span><span>Welcome to <strong>Inboxy</strong><small>Your operations, connected.</small></span></div><input class="search" id="search" aria-label="Search tasks, customers, references" placeholder="Search tasks, customers, references…" value="${esc(query)}"><div class="topbar-right"><span class="demo" data-cloud-status>${cloud.workspace?(cloud.failed?'Not saved · export before reload':cloud.pending?'Saving…':'Shared workspace'):'Local demo'}</span><button id="account-access" class="small">${cloud.workspace?'Account':'Sign in'}</button><span class="avatar">IA</span></div></header><aside class="sidebar"><div class="logo">inboxy<b>↗</b><small>OPERATIONS, CONNECTED</small></div><div class="workspace">${esc(cloud.workspace?.name||'N10 Logistics')} <span>${cloud.workspace?'Shared operations workspace':'Operations workspace · Demo'}</span></div><nav class="nav" aria-label="Workspace"><button data-page="today" class="${page==='today'?'active':''}"><span>Today</span></button><button data-page="workspace" class="${page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 3v18M15 3v18"/></svg> <span>Workspace</span><span class="count">${active.length}</span></button><button data-page="inbox" class="${page==='inbox'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/></svg> <span>Email inbox</span><span class="count">${state.emails.filter(e=>!e.taskId).length}</span></button><button data-page="shipments" class="${page==='shipments'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5v9l-9 5-9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v9M7.5 5.5l9 5"/></svg> <span>Shipments</span></button><button data-page="workload" class="${page==='workload'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/></svg> <span>Team workload</span></button><label>TEAM QUEUES</label>${TEAMS.map(t=>`<button data-team="${esc(t)}" class="${team===t&&page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="4"/></svg> <span>${esc(t)}</span><span class="count">${active.filter(x=>x.team===t).length}</span></button>`).join('')}<label>WORKSPACE</label><button data-page="groups" class="${page==='groups'?'active':''}">＋ <span>Groups & people</span></button><button data-page="settings" class="${page==='settings'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="white"/><circle cx="16" cy="17" r="3" fill="white"/></svg> <span>Connections & data</span></button></nav><footer><span class="avatar">IA</span> ${esc(cloud.user?.email||'Ignacio')}<br><span>Keep every handoff visible.</span></footer></aside><main class="main"><div class="content"><div class="eyebrow">N10 / OPERATIONS</div><div class="heading"><div><h1>${({today:'Today',workspace:team==='All teams'?'Operations inbox':team+' space',inbox:'Email inbox',shipments:'Shipments',workload:'Team workload',settings:'Workspace settings',groups:'Team & groups'})[page]}</h1><p class="muted">${({today:'New replies, deadlines, and follow-ups.',workspace:'',inbox:'Capture requests and keep the original instructions close.',shipments:'Keep tasks, handoffs, and customer updates together.',workload:'Spot overloaded queues and rebalance the work.',settings:'Manage local data and plan your live connections.',groups:'Create your groups. Bring in your people. Give every request a home.'})[page]}</p></div><div class="actions">${page==='groups'?'<button id="new-group">New group</button><button id="new-person">Add assignee</button><button id="team-access" class="primary">Team access</button>':''}${page==='inbox'?'<button id="email-connections">Connections</button><button id="capture">Capture email</button><button id="inbox-sync" class="primary">Sync inbox</button>':''}${page==='shipments'?'<button class="primary" id="new-shipment">＋ New shipment</button>':['groups','inbox'].includes(page)?'':'<button class="primary" id="new-task">＋ New task</button>'}</div></div>${page==='workspace'?`${composerHTML()}<div class="toolbar"><div class="segments">${['Focus','Board','List','Do next'].map(v=>`<button data-view="${v}" class="${view===v?'active':''}">${v==='Board'?'▦':v==='List'?'☷':'↗'} ${v}</button>`).join('')}</div><div class="filters"><select id="team" aria-label="Filter by team">${options(['All teams',...TEAMS],team)}</select><select id="owner" aria-label="Filter by owner">${options(['All owners',...USERS],owner)}</select><select id="customer-filter" aria-label="Filter by customer"><option value="">All customers</option>${options([...new Set([...state.shipments.map(s=>s.customer),...state.tasks.map(taskCustomer)].filter(Boolean))].sort(),customerFilter)}</select><select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option>${options(STATUSES,statusFilter)}</select><input type="date" id="due-filter" aria-label="Filter by due date" title="Filter by due date" value="${esc(dueFilter)}"><select id="work-queue" aria-label="Filter by work queue"><option value="">All work</option>${options(Object.keys(workQueues),workQueue)}</select><button id="ftz-filter" class="small ${ftzOnly?'primary':''}" aria-pressed="${ftzOnly}">FTZ only</button><button id="customize-ftz" class="small">Task templates</button><button id="clear" class="small">Clear filters</button></div></div><div id="task-results">${taskResults()}</div><div class="bottom-note">${attention?'Showing overdue, unassigned, and follow-up-due tasks. ':''}${cloud.workspace?'Shared with your workspace. Team filters are views, not access permissions.':'Local demo: changes stay in this browser. Sign in to use shared data.'}</div>`:page==='today'?todayHTML():page==='inbox'?inboxHTML():page==='shipments'?shipmentsHTML():page==='workload'?workloadHTML():page==='groups'?groupsHTML():settingsHTML()}</div></main><nav class="glass-dock" aria-label="Quick navigation">${[['today','Today'],['workspace','Board'],['inbox','Inbox'],['shipments','Shipments'],['groups','Team']].map(([key,label])=>`<button data-page="${key}" class="${page===key?'active':''}">${label}</button>`).join('')}<button id="dock-add" aria-label="Create task">＋</button></nav></div>`;
+$('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass-welcome"><span class="avatar">N10</span><span>Welcome to <strong>Inboxy</strong><small>Your operations, connected.</small></span></div><input class="search" id="search" aria-label="Search tasks, customers, references" placeholder="Search tasks, customers, references…" value="${esc(query)}"><div class="topbar-right"><span class="demo" data-cloud-status>${cloud.workspace?(cloud.failed?'Not saved · export before reload':cloud.pending?'Saving…':'Shared workspace'):'Local demo'}</span><button id="account-access" class="small">${cloud.workspace?'Account':'Sign in'}</button><span class="avatar">IA</span></div></header><aside class="sidebar"><div class="logo">inboxy<b>↗</b><small>OPERATIONS, CONNECTED</small></div><div class="workspace">${esc(cloud.workspace?.name||'N10 Logistics')} <span>${cloud.workspace?'Shared operations workspace':'Operations workspace · Demo'}</span></div><nav class="nav" aria-label="Workspace"><button data-page="today" class="${page==='today'?'active':''}"><span>Today</span></button><button data-page="workspace" class="${page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 3v18M15 3v18"/></svg> <span>Workspace</span><span class="count">${active.length}</span></button><button data-page="inbox" class="${page==='inbox'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 7 9 6 9-6"/></svg> <span>Email inbox</span><span class="count">${state.emails.filter(e=>!e.taskId).length}</span></button><button data-page="shipments" class="${page==='shipments'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5v9l-9 5-9-5V8Z"/><path d="m3 8 9 5 9-5M12 13v9M7.5 5.5l9 5"/></svg> <span>Shipments</span></button><button data-page="workload" class="${page==='workload'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 6"/></svg> <span>Team workload</span></button><label>TEAM QUEUES</label>${TEAMS.map(t=>`<button data-team="${esc(t)}" class="${team===t&&page==='workspace'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="4"/></svg> <span>${esc(t)}</span><span class="count">${active.filter(x=>x.team===t).length}</span></button>`).join('')}<label>WORKSPACE</label><button data-page="groups" class="${page==='groups'?'active':''}">＋ <span>Groups & people</span></button><button data-page="settings" class="${page==='settings'?'active':''}"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="white"/><circle cx="16" cy="17" r="3" fill="white"/></svg> <span>Connections & data</span></button></nav><footer><span class="avatar">IA</span> ${esc(cloud.user?.email||'Ignacio')}<br><span>Keep every handoff visible.</span></footer></aside><main class="main"><div class="content"><div class="eyebrow">N10 / OPERATIONS</div><div class="heading"><div><h1>${({today:'Today',workspace:team==='All teams'?'Operations inbox':team+' space',inbox:'Email inbox',shipments:'Shipments',workload:'Team workload',settings:'Workspace settings',groups:'Team & groups'})[page]}</h1><p class="muted">${({today:'New replies, deadlines, and follow-ups.',workspace:'',inbox:'Capture requests and keep the original instructions close.',shipments:'Keep tasks, handoffs, and customer updates together.',workload:'Spot overloaded queues and rebalance the work.',settings:'Manage local data and plan your live connections.',groups:'Create your groups. Bring in your people. Give every request a home.'})[page]}</p></div><div class="actions">${page==='groups'?'<button id="new-group">New group</button><button id="new-person">Add assignee</button><button id="team-access" class="primary">Team access</button>':''}${page==='inbox'?'<button id="email-connections">Connections</button><button id="capture">Capture email</button><button id="inbox-sync" class="primary">Sync inbox</button>':''}${page==='shipments'?'<button class="primary" id="new-shipment">＋ New shipment</button>':['groups','inbox'].includes(page)?'':'<button class="primary" id="new-task">＋ New task</button>'}</div></div>${page==='workspace'?`${composerHTML()}${planningBar()}<div class="toolbar"><div class="segments">${['Focus','Board','List','Do next'].map(v=>`<button data-view="${v}" class="${view===v?'active':''}">${v==='Board'?'▦':v==='List'?'☷':'↗'} ${v}</button>`).join('')}</div><div class="filters"><select id="team" aria-label="Filter by team">${options(['All teams',...TEAMS],team)}</select><select id="owner" aria-label="Filter by owner">${options(['All owners',...USERS],owner)}</select><select id="customer-filter" aria-label="Filter by customer"><option value="">All customers</option>${options([...new Set([...state.shipments.map(s=>s.customer),...state.tasks.map(taskCustomer)].filter(Boolean))].sort(),customerFilter)}</select><select id="status-filter" aria-label="Filter by status"><option value="">All statuses</option>${options(STATUSES,statusFilter)}</select><input type="date" id="due-filter" aria-label="Filter by due date" title="Filter by due date" value="${esc(dueFilter)}"><select id="work-queue" aria-label="Filter by work queue"><option value="">All work</option>${options(Object.keys(workQueues),workQueue)}</select><button id="ftz-filter" class="small ${ftzOnly?'primary':''}" aria-pressed="${ftzOnly}">FTZ only</button><button id="customize-ftz" class="small">Task templates</button><button id="clear" class="small">Clear filters</button></div></div><div id="task-results">${taskResults()}</div><div class="bottom-note">${attention?'Showing overdue, unassigned, and follow-up-due tasks. ':''}${cloud.workspace?'Shared with your workspace. Team filters are views, not access permissions.':'Local demo: changes stay in this browser. Sign in to use shared data.'}</div>`:page==='today'?todayHTML():page==='inbox'?inboxHTML():page==='shipments'?shipmentsHTML():page==='workload'?workloadHTML():page==='groups'?groupsHTML():settingsHTML()}</div></main><nav class="glass-dock" aria-label="Quick navigation">${[['today','Today'],['workspace','Board'],['inbox','Inbox'],['shipments','Shipments'],['groups','Team']].map(([key,label])=>`<button data-page="${key}" class="${page===key?'active':''}">${label}</button>`).join('')}<button id="dock-add" aria-label="Create task">＋</button></nav></div>`;
  $('#team-access')?.addEventListener('click',()=>cloud.workspace?accountDialog():toast('Sign in to manage workspace access.'));
- $('#account-access').onclick=()=>cloud.workspace?accountDialog():location.reload();document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;if(page==='workspace'){team='All teams';owner='All owners';query='';attention=false;}render();window.scrollTo({top:0,behavior:'instant'});});document.querySelectorAll('[data-team]').forEach(b=>b.onclick=()=>{team=b.dataset.team;page='workspace';attention=false;render();});
- $('#search').oninput=e=>{query=e.target.value;if(page!=='workspace'){page='workspace';render();$('#search').focus();}else{$('#task-results').innerHTML=taskResults();bindCards();bindPage();bindDirectory();}};
+ $('#account-access').onclick=()=>cloud.workspace?accountDialog():location.reload();document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=b.dataset.page;if(page==='workspace'){team='All teams';owner='All owners';query='';operationFilter='';attention=false;}render();window.scrollTo({top:0,behavior:'instant'});});document.querySelectorAll('[data-team]').forEach(b=>b.onclick=()=>{team=b.dataset.team;page='workspace';attention=false;render();});
+ $('#search').oninput=e=>{query=e.target.value;if(page==='shipments'){const caret=e.target.selectionStart;render();$('#search').focus();$('#search').setSelectionRange(caret,caret);}else if(page!=='workspace'){page='workspace';render();$('#search').focus();}else{$('#task-results').innerHTML=taskResults();bindCards();bindPage();bindDirectory();bindPlanning();}};
  $('#new-task')?.addEventListener('click',()=>focusComposer());$('#new-shipment')?.addEventListener('click',()=>shipmentEditor());$('#capture')?.addEventListener('click',captureEmail);$('#new-group')?.addEventListener('click',()=>groupEditor());$('#new-person')?.addEventListener('click',()=>personEditor());
- document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render();});$('#team')?.addEventListener('change',e=>{team=e.target.value;render();});$('#owner')?.addEventListener('change',e=>{owner=e.target.value;render();});$('#attention')?.addEventListener('click',()=>{attention=!attention;view='Do next';render();});$('#clear')?.addEventListener('click',()=>{team='All teams';owner='All owners';query='';customerFilter=statusFilter=dueFilter=workQueue='';ftzOnly=false;attention=false;render();});
+ document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;render();});$('#team')?.addEventListener('change',e=>{team=e.target.value;render();});$('#owner')?.addEventListener('change',e=>{owner=e.target.value;render();});$('#attention')?.addEventListener('click',()=>{attention=!attention;view='Do next';render();});$('#clear')?.addEventListener('click',()=>{team='All teams';owner='All owners';query='';customerFilter=statusFilter=dueFilter=workQueue=typeFilter=priorityFilter=operationFilter='';scope='All tasks';groupBy='None';selectedTasks.clear();ftzOnly=false;attention=false;render();});
  $('#customize-ftz')?.addEventListener('click',()=>editFtzTemplates());
  $('#work-queue')?.addEventListener('change',e=>{
   workQueue=e.target.value;attention=false;
@@ -92,7 +94,7 @@ $('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass
  $('#customer-filter')?.addEventListener('change',e=>{customerFilter=e.target.value;render();});
  $('#status-filter')?.addEventListener('change',e=>{statusFilter=e.target.value;render();});
  $('#due-filter')?.addEventListener('change',e=>{dueFilter=e.target.value;render();});
- bindCards();bindPage();bindDirectory();
+ bindCards();bindPage();bindDirectory();bindPlanning();
  $('#dock-add')?.addEventListener('click',()=>focusComposer());
  if(page==='workspace')bindComposer();
  const composer=$('#inline-capture');
@@ -110,26 +112,47 @@ function checklist(taskId){
 function nextAction(task){
  return task.nextAction || (task.status!=='Completed'&&checklist(task.id).find(step=>step.status!=='Completed')?.title);
 }
-function card(t){const blocks=blockedBy(t,state.tasks),children=state.tasks.filter(x=>x.parentId===t.id),emails=state.emails.filter(e=>e.taskId===t.id);return `<article class="card operation-card priority-${t.priority.toLowerCase()} ${blocks.length?'has-blockers':''} ${t.status==='Completed'?'is-complete':''}" draggable="true" tabindex="0" role="group" data-task="${t.id}" aria-label="${esc(t.title)}"><div class="card-context"><span class="ref">${esc(taskReferences(t)[0]||'GENERAL REQUEST')}</span><button class="drag-handle" data-drag="${t.id}" aria-label="Drag ${esc(t.title)}" title="Drag to move or reorder" draggable="false">⠿</button></div><button class="card-open"><h3>${esc(t.title)}</h3></button><div class="customer">${esc(taskCustomer(t)||t.team)}${t.parentId?' · Subtask':''}</div><button class="next-action" data-field="nextAction" data-quick-edit="${t.id}"><span>NEXT</span><strong>${esc(nextAction(t)||'Add next action')}</strong><span>↗</span></button>${blocks.length?`<div class="blocked-line">↳ Waiting on ${esc(blocks[0].title)}${blocks.length>1?' +'+(blocks.length-1):''}</div>`:''}<div class="card-signals"><span class="badge ${t.priority}">${esc(t.priority)}</span>${t.due&&new Date(t.due)<new Date()&&t.status!=='Completed'?'<span class="overdue-pill">Overdue</span>':''}${children.length?`<span>☑ ${children.filter(c=>c.status==='Completed').length}/${children.length}</span>`:''}${emails.length?`<button data-card-email="${t.id}">✉ ${emails.length}</button>`:''}${t.followUp?`<span title="Follow-up">↻ ${esc(fmt(t.followUp))}</span>`:''}</div><div class="card-bottom"><button class="card-owner" data-field="owner" data-quick-edit="${t.id}"><span class="avatar">${esc(initials(t.owner))}</span>${esc(t.owner)}</button><button class="card-due ${t.due&&new Date(t.due)<new Date()&&t.status!=='Completed'?'overdue':''}" data-field="due" data-quick-edit="${t.id}">${t.due?esc(fmt(t.due)):'＋ Due date'}</button></div><label class="card-move"><span>Move to</span><select data-move="${t.id}" aria-label="Move ${esc(t.title)} to status">${options(STATUSES,t.status)}</select></label></article>`;}
-function taskResults(){let list=filtered();if(view==='Do next')list=list.filter(t=>t.status!=='Completed');if(!list.length&&view!=='Board')return '<div class="panel empty">No tasks match these filters.</div>';if(view==='Focus')return focusHTML(list);if(view==='Board')return `<div class="board-guidance"><span>Drag cards between columns. Drag the grip to move on touch screens.</span><span>Or use “Move to” on any card.</span></div><div class="board">${STATUSES.map(status=>`<section class="column" data-status="${status}" aria-label="${status} column"><div class="column-head"><i class="dot"></i>${status}<span class="number">${list.filter(t=>t.status===status).length}</span><button class="column-add" data-add-status="${status}" aria-label="Add task to ${status}">＋</button></div><div class="column-cards">${list.filter(t=>t.status===status).sort((a,b)=>(a.boardOrder??state.tasks.indexOf(a))-(b.boardOrder??state.tasks.indexOf(b))).map(card).join('')||'<div class="drop-placeholder">Drop a task here</div>'}</div><form class="column-quick-add" data-quick-status="${status}"><input name="title" required maxlength="180" aria-label="New task in ${status}" placeholder="＋ Add a task…"><button type="submit" aria-label="Create task in ${status}">↵</button></form></section>`).join('')}</div>`;return `<div class="table-wrap"><table><thead><tr><th>Task / next action</th><th>Reference</th><th>Team / owner</th><th>Status</th><th>Due</th><th>Priority reason</th></tr></thead><tbody>${list.map(t=>`<tr tabindex="0" data-task="${t.id}"><td><strong>${esc(t.title)}</strong><p class="muted">${esc(nextAction(t)||'Define next action')}</p></td><td>${esc(taskReferences(t)[0]||'—')}${taskCustomer(t)?`<br><small class="muted">${esc(taskCustomer(t))}</small>`:''}</td><td>${esc(t.team)}<br>${esc(t.owner)}</td><td><span class="badge">${t.status}</span></td><td>${esc(fmt(t.due))}</td><td>${esc(priority(t,state.tasks).reasons.join(' · '))}</td></tr>`).join('')}</tbody></table></div>`;}
+function card(t){const blocks=blockedBy(t,state.tasks),children=state.tasks.filter(x=>x.parentId===t.id),emails=conversations().filter(thread=>thread.taskIds.includes(t.id));return `<article class="card operation-card priority-${t.priority.toLowerCase()} ${blocks.length?'has-blockers':''} ${t.status==='Completed'?'is-complete':''}" draggable="true" tabindex="0" role="group" data-task="${t.id}" aria-label="${esc(t.title)}"><div class="card-context"><span class="ref">${esc(taskReferences(t)[0]||'GENERAL REQUEST')}</span><button class="drag-handle" data-drag="${t.id}" aria-label="Drag ${esc(t.title)}" title="Drag to move or reorder" draggable="false">⠿</button></div><button class="card-open"><h3>${esc(t.title)}</h3></button><div class="customer">${esc(taskCustomer(t)||t.team)}${t.parentId?' · Subtask':''}</div><button class="next-action" data-field="nextAction" data-quick-edit="${t.id}"><span>NEXT</span><strong>${esc(nextAction(t)||'Add next action')}</strong><span>↗</span></button>${blocks.length?`<div class="blocked-line">↳ Waiting on ${esc(blocks[0].title)}${blocks.length>1?' +'+(blocks.length-1):''}</div>`:''}<div class="card-signals"><span class="badge ${t.priority}">${esc(t.priority)}${t.priorityOverride?' · Manual':''}</span>${deadline(t)&&dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'<span class="overdue-pill">Overdue</span>':''}${children.length?`<span>☑ ${children.filter(c=>c.status==='Completed').length}/${children.length}</span>`:''}${emails.length?`<button data-card-email="${t.id}">✉ ${emails.length}</button>`:''}${t.followUp?`<span title="Follow-up">↻ ${esc(fmt(t.followUp))}</span>`:''}</div><div class="card-bottom"><button class="card-owner" data-field="owner" data-quick-edit="${t.id}"><span class="avatar">${esc(initials(t.owner))}</span>${esc(t.owner)}</button><button class="card-due ${dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'overdue':''}" data-field="${t.cutoff?'cutoff':'due'}" data-quick-edit="${t.id}">${t.cutoff?'Cutoff · '+esc(fmt(t.cutoff)):t.due?esc(fmt(t.due)):'＋ Due date'}</button></div><label class="card-move"><span>Move to</span><select data-move="${t.id}" aria-label="Move ${esc(t.title)} to status">${options(STATUSES,t.status)}</select></label></article>`;}
+function taskResults(){const list=filtered();if(view==='List'||view==='Do next')return taskTable(view==='Do next'?list.filter(t=>t.status!=='Completed'):list);if(!list.length&&view!=='Board')return '<div class="panel empty">No tasks match these filters.</div>';if(view==='Focus')return focusHTML(list);if(view==='Board')return `<div class="board-guidance"><span>Drag cards between columns. Drag the grip to move on touch screens.</span><span>Or use “Move to” on any card.</span></div><div class="board">${STATUSES.map(status=>`<section class="column" data-status="${status}" aria-label="${status} column"><div class="column-head"><i class="dot"></i>${status}<span class="number">${list.filter(t=>t.status===status).length}</span><button class="column-add" data-add-status="${status}" aria-label="Add task to ${status}">＋</button></div><div class="column-cards">${list.filter(t=>t.status===status).sort((a,b)=>(a.boardOrder??state.tasks.indexOf(a))-(b.boardOrder??state.tasks.indexOf(b))).map(card).join('')||'<div class="drop-placeholder">Drop a task here</div>'}</div><form class="column-quick-add" data-quick-status="${status}"><input name="title" required maxlength="180" aria-label="New task in ${status}" placeholder="＋ Add a task…"><button type="submit" aria-label="Create task in ${status}">↵</button></form></section>`).join('')}</div>`;return taskTable(list);}
 function bindCards(){document.querySelectorAll('[data-task]').forEach(b=>{b.onclick=e=>{if(e.target.closest('button,select,input')&&!e.target.closest('.card-open'))return;taskDetail(b.dataset.task);};b.onkeydown=e=>{if(e.target===b&&(e.key==='Enter'||e.key===' ')){e.preventDefault();taskDetail(b.dataset.task);}};});bindBoard();}
-function taskEditor(id,defaults={}){const t=id?state.tasks.find(t=>t.id===id):{title:'',shipmentId:defaults.shipmentId||'',team:team==='All teams'?'Ops':team,owner:'Unassigned',status:'Up next',priority:'Normal',due:'',followUp:'',nextAction:'',description:'',parentId:defaults.parentId||null,dependencies:[],public:false,publicTitle:'',impact:false};
-openDialog(id?'Edit task':'Create a task',`<form id="task-form" class="form-grid">${id?'':workflowPicker()}<label class="field full">Task title<input name="title" required maxlength="180" value="${esc(t.title)}" placeholder="What needs to happen?"></label>${logisticsFields(t)}${ftzReferenceField(t.ftzReference)}<label class="field">Shipment / operational record<select name="shipmentId"><option value="">General request</option>${state.shipments.map(s=>`<option value="${s.id}" ${t.shipmentId===s.id?'selected':''}>${esc(s.reference+' · '+s.customer)}</option>`).join('')}</select></label><label class="field">Team<select name="team">${options(TEAMS,t.team)}</select></label><label class="field">Owner<select name="owner">${options(USERS,t.owner)}</select></label><label class="field">Status<select name="status">${options(STATUSES,t.status)}</select></label><label class="field">Priority<select name="priority">${options(['Urgent','High','Normal','Low'],t.priority)}</select></label><label class="field">Deadline<input type="datetime-local" name="due" value="${esc(t.due)}"></label><label class="field">Follow up at<input type="datetime-local" name="followUp" value="${esc(t.followUp)}"></label><label class="field">Next action<input name="nextAction" value="${esc(t.nextAction)}" placeholder="A clear, concrete next step"></label><label class="field full">Operational instructions<textarea name="description">${esc(t.description)}</textarea></label><label class="field full">Blocked by (hold Ctrl / ⌘ to select multiple)<select name="dependencies" multiple size="3">${state.tasks.filter(x=>x.id!==id).map(x=>`<option value="${x.id}" ${t.dependencies.includes(x.id)?'selected':''}>${esc(x.title)}</option>`).join('')}</select></label><label class="check-row full"><input type="checkbox" name="impact" ${t.impact?'checked':''}> Operational impact: cutoff, hold, cost, or appointment risk</label><label class="check-row full"><input type="checkbox" name="public" ${t.public?'checked':''}> Include this milestone in the customer preview</label><label class="field full">Customer-facing milestone title<input name="publicTitle" value="${esc(t.publicTitle)}" placeholder="Use a customer-safe title"></label></form>`,`<button data-cancel>Cancel</button><button type="submit" form="task-form" class="primary">${id?'Save changes':'Create task'}</button>`);
- $('[data-cancel]').onclick=()=>$('#detail').close();bindWorkflow($('#task-form'));$('#task-form').onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const changes=Object.fromEntries(f);const steps=f.getAll('workflowStep');if(!changes.workflow)delete changes.workflow;delete changes.workflowStep;for(const key of ['customer','ourReference','customerReference','ftzReference'])changes[key]=changes[key].trim();if(steps.length&&changes.status==='Completed')return toast('Choose an active status for a task with checklist steps.');changes.dependencies=f.getAll('dependencies');changes.public=f.has('public');changes.impact=f.has('impact');changes.title=changes.title.trim();if(!changes.title)return toast('Add a task title.');if(changes.dependencies.some(dep=>hasDependencyPath(dep,id)))return toast('This dependency would create a cycle.');if(changes.status==='Completed'){const issue=completionIssue({...t,...changes},state.tasks);if(issue)return toast(issue);}const now=new Date().toISOString();if(id){Object.assign(t,changes);activity(t,'Task updated');}else{const nt={...t,...changes,id:uid(),notes:[],activity:[{text:'Task created',date:now}]};state.tasks.push(nt);addWorkflowSteps(nt,steps);if(defaults.emailId){state.emails.find(x=>x.id===defaults.emailId).taskId=nt.id;}}save();$('#detail').close();render();toast('Task saved');};}
+function taskEditor(id){
+ const task=state.tasks.find(t=>t.id===id);
+ openDialog('Dependencies & sharing',`<div class="task-properties">
+  <label class="field">Blocked by<select id="task-dependencies" multiple size="5">${state.tasks.filter(t=>t.id!==id).map(t=>`<option value="${esc(t.id)}" ${task.dependencies.includes(t.id)?'selected':''}>${esc(t.title)}</option>`).join('')}</select></label>
+  <label class="check-row"><input id="task-impact" type="checkbox" ${task.impact?'checked':''}> Operational impact</label>
+  <label class="check-row"><input id="task-public" type="checkbox" ${task.public?'checked':''}> Show milestone in customer update</label>
+  <label class="field">Customer-facing title<input id="task-public-title" value="${esc(task.publicTitle)}"></label>
+ </div>`,'<button id="save-task-settings" class="primary">Save</button>');
+ $('#save-task-settings').onclick=()=>{
+  const dependencies=[...$('#task-dependencies').selectedOptions].map(option=>option.value);
+  if(dependencies.some(id=>hasDependencyPath(id,task.id)))return toast('This dependency would create a cycle.');
+  if(task.status==='Completed'){
+   const issue=completionIssue({...task,dependencies},state.tasks);
+   if(issue)return toast(issue);
+  }
+  Object.assign(task,{dependencies,impact:$('#task-impact').checked,public:$('#task-public').checked,publicTitle:$('#task-public-title').value.trim()});
+  activity(task,'Updated dependencies and sharing');save();render();taskDetail(id);
+ };
+}
 function hasDependencyPath(start,target,visited=new Set()){if(!target)return false;if(start===target)return true;if(visited.has(start))return false;visited.add(start);return state.tasks.find(t=>t.id===start)?.dependencies.some(d=>hasDependencyPath(d,target,visited))||false;}
-function taskDetail(id,focus){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),threads=conversations().filter(thread=>thread.taskId===id),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks);
-openDialog('Task',`<div class="actions task-context"><span class="badge">${esc(t.team)}</span>${t.workflow?`<span class="badge">${esc(t.workflow)}</span>`:''}</div><h2>${esc(t.title)}</h2>${taskCustomer(t)||taskReferences(t).length?`<p class="muted task-reference-line">${esc([taskCustomer(t),...new Set(taskReferences(t))].filter(Boolean).join(' · '))}</p>`:''}${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}${t.description?`<p>${esc(t.description)}</p>`:''}<div class="task-follow-up">${t.followUp?`Reminder ${esc(fmt(t.followUp))}`:''}${t.status==='Completed'?'':`<div class="actions task-reminders">${reminderButtons()}<button id="custom-reminder">Pick a time</button>${t.followUp?'<button id="clear-reminder">Clear reminder</button>':''}</div>`}</div><div class="section-title"><h3>Subtasks <span class="muted">${children.filter(x=>x.status==='Completed').length}/${children.length}</span></h3>${t.status==='Completed'?'':'<form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form>'}</div>${children.map(c=>`<div class="check-row"><button class="small" data-complete-child="${c.id}" aria-label="Complete ${esc(c.title)}" ${c.status==='Completed'?'disabled':''}>${c.status==='Completed'?'✓':'○'}</button><span>${esc(c.title)}<small class="muted"> · ${esc(c.team)} / ${esc(c.owner)}</small></span><button data-child="${c.id}" class="small">Open</button></div>`).join('')||'<p class="muted">Break this work into clear team handoffs.</p>'}<details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p><button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><h3>Internal notes</h3>${t.notes.map(n=>`<div class="note">${esc(n.body)}<small>${esc(n.author)} · ${esc(fmt(n.date))}</small></div>`).join('')}<form id="note-form" class="inline-form"><textarea name="note" aria-label="Internal note" required placeholder="Add an internal note…"></textarea><button>Add note</button></form><h3>Activity</h3>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))}</p>`).join('')||'<p class="muted">No activity yet.</p>'}`,`<button id="edit-task">More settings</button>${s?'<button id="share-task">Customer update</button>':''}${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`);
+function taskDetail(id,focus){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),threads=conversations().filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks);
+openDialog('Task',`<div class="actions task-context"><span class="badge">${esc(t.team)}</span>${t.workflow?`<span class="badge">${esc(t.workflow)}</span>`:''}</div><h2>${esc(t.title)}</h2>${taskCustomer(t)||taskReferences(t).length?`<p class="muted task-reference-line">${esc([taskCustomer(t),...new Set(taskReferences(t))].filter(Boolean).join(' · '))}</p>`:''}${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}${t.description?`<p>${esc(t.description)}</p>`:''}<div class="task-follow-up">${t.followUp?`Reminder ${esc(fmt(t.followUp))}`:''}${t.status==='Completed'?'':`<div class="actions task-reminders">${reminderButtons()}<button id="custom-reminder">Pick a time</button>${t.followUp?'<button id="clear-reminder">Clear reminder</button>':''}</div>`}</div><div class="section-title"><h3>Subtasks <span class="muted">${children.filter(x=>x.status==='Completed').length}/${children.length}</span></h3>${t.status==='Completed'?'':'<form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form>'}</div>${children.map(c=>`<div class="check-row"><button class="small" data-complete-child="${c.id}" aria-label="Complete ${esc(c.title)}" ${c.status==='Completed'?'disabled':''}>${c.status==='Completed'?'✓':'○'}</button><span>${esc(c.title)}<small class="muted"> · ${esc(c.team)} / ${esc(c.owner)}</small></span><button data-child="${c.id}" class="small">Open</button></div>`).join('')||'<p class="muted">Break this work into clear team handoffs.</p>'}<details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><h3>Internal notes</h3>${t.notes.map(n=>`<div class="note">${esc(n.body)}<small>${esc(n.author)} · ${esc(fmt(n.date))}</small></div>`).join('')}<form id="note-form" class="inline-form"><textarea name="note" aria-label="Internal note" required placeholder="Add an internal note…"></textarea><button>Add note</button></form><h3>Activity</h3>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}`,`<button id="delete-task" class="danger">Delete</button><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`);
+ bindAttachments();
+ document.querySelectorAll('[data-source-email]').forEach(button=>button.onclick=()=>openInboxMessage(button.dataset.sourceEmail));
  $('#mark-mail-reviewed')?.addEventListener('click',()=>{t.mailReviewedAt=new Date().toISOString();save();render();taskDetail(id);});
  $('#edit-task').onclick=()=>taskEditor(id);
+ $('#delete-task')?.addEventListener('click',()=>confirmTaskDeletion([id]));
  const properties=$('#inline-properties');
  for(const control of properties.querySelectorAll('input,select')){
   control.onchange=()=>{
    const key=control.name,value=control.value.trim();
-   if((t[key]||'')===value)return;
+   if(key==='title'&&!value){control.value=t.title;return toast('Enter a task title.');}
+   if((t[key]||'')===value&&key!=='priority')return;
    if(key==='status'){
     const issue=moveTask(state.tasks,id,value);
     if(issue){control.value=t.status;return toast(issue);}
    }else t[key]=value;
+   if(key==='priority')t.priorityOverride=true;
    activity(t,'Updated '+control.labels[0].textContent.trim().split(/\s+/).slice(0,key==='nextAction'?2:1).join(' ').toLowerCase());
    const chip=properties.querySelector('[data-property='+key+']');
    if(chip){
@@ -138,7 +161,7 @@ openDialog('Task',`<div class="actions task-context"><span class="badge">${esc(t
     chip.title=display||chip.dataset.label;
    }
    save();render();
-   if(key==='status'||key==='followUp')taskDetail(id);
+   if(['status','followUp','title','description','team','clientId','shipmentId','priority','taskType'].includes(key))taskDetail(id);
   };
  }
  const showProperty=key=>{
@@ -148,7 +171,7 @@ openDialog('Task',`<div class="actions task-context"><span class="badge">${esc(t
   field.focus();
  };
  properties.querySelectorAll('[data-property]').forEach(chip=>chip.onclick=()=>showProperty(chip.dataset.property));
- if(focus)properties.querySelector('[name='+focus+']')?.focus();
+ if(focus){const control=properties.querySelector('[name='+focus+']');if(control?.parentElement.hidden)showProperty(focus);else control?.focus();}
 const updateReminder=value=>{
   t.followUp=value;activity(t,value?'Follow-up reminder set':'Follow-up reminder cleared');save();render();taskDetail(id);
  };
@@ -190,49 +213,56 @@ function conversations(){
  }
  return [...map].map(([key,messages])=>{
   messages.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||a.id.localeCompare(b.id));
-  return {key,messages,latest:messages[0],taskId:messages.find(m=>m.taskId)?.taskId};
+  return {key,messages,latest:messages[0],taskIds:relatedTaskIds(messages),shipmentIds:[...new Set(messages.flatMap(message=>message.shipmentIds||[]))]};
  }).sort((a,b)=>String(b.latest.date||'').localeCompare(String(a.latest.date||'')));
 }
 function pendingReply(task,threads){
- const latest=threads.find(thread=>thread.taskId===task.id)?.latest;
+ const latest=threads.find(thread=>!thread.latest.deletedAt&&thread.taskIds.includes(task.id))?.latest;
  return latest&&new Date(latest.date)>new Date(task.mailReviewedAt||task.activity.at(-1)?.date||0)?latest:null;
 }
 function inboxHTML(){
  const metadata=personalState('inbox-view'),query=mailQuery.trim().toLowerCase();
  const threads=conversations().filter(thread=>{
+  if(thread.latest.deletedAt||inboxFilter==='Trash')return Boolean(thread.latest.deletedAt)&&inboxFilter==='Trash'&&(!query||thread.messages.some(m=>[m.from,m.subject,m.body].join(' ').toLowerCase().includes(query)));
   const archived=metadata[thread.key]?.latestId===thread.latest.id;
   if(inboxFilter==='Archived'? !archived : archived)return false;
-  if(inboxFilter==='Unlinked'&&thread.taskId)return false;
-  if(inboxFilter==='Linked'&&!thread.taskId)return false;
+  if(inboxFilter==='Unlinked'&&thread.taskIds.length)return false;
+  if(inboxFilter==='Linked'&&!thread.taskIds.length)return false;
   return !query||thread.messages.some(m=>[m.from,m.subject,m.body].join(' ').toLowerCase().includes(query));
  });
  const thread=threads.find(item=>item.messages.some(m=>m.id===selectedEmail))||threads[0];
  const e=thread?.latest;
- const task=state.tasks.find(t=>t.id===thread?.taskId);
+ const tasks=state.tasks.filter(t=>thread?.taskIds.includes(t.id));
+ const reviewTasks=thread?emailUpdateCandidates(thread):[];
  const toolbar=`<div class="inbox-toolbar">
   <input type="search" id="mail-search" aria-label="Search email" placeholder="Search sender, subject, or message" value="${esc(mailQuery)}">
-  <div class="segments" aria-label="Inbox filters">${['Inbox','Unlinked','Linked','Archived'].map(label=>`<button data-mail-filter="${label}" class="${label===inboxFilter?'active':''}">${label}</button>`).join('')}</div>
+  <div class="segments" aria-label="Inbox filters">${['Inbox','Unlinked','Linked','Archived','Trash'].map(label=>`<button data-mail-filter="${label}" class="${label===inboxFilter?'active':''}">${label}</button>`).join('')}</div>
   <span id="inbox-sync-state" class="muted" role="status"></span>
  </div>`;
- const list=threads.map(item=>`<button class="mail-row ${item===thread?'selected':''}" data-email="${esc(item.latest.id)}">
+ const list=threads.map(item=>`<div class="mail-select-row"><input type="checkbox" data-select-mail="${esc(item.key)}" aria-label="Select ${esc(item.latest.subject)}" ${selectedThreads.has(item.key)?'checked':''}><button class="mail-row ${item===thread?'selected':''}" data-email="${esc(item.latest.id)}">
   <small>${esc(item.latest.from)} <time>${esc(fmt(item.latest.date))}</time></small>
   <strong>${esc(item.latest.subject)}</strong>
   <span class="mail-preview">${esc(item.latest.body?.replace(/\s+/g,' ').slice(0,130))}</span>
-  <span class="mail-row-meta">${item.taskId?'Linked task':'Unlinked'}${item.messages.length>1?' · '+item.messages.length+' messages':''}</span>
- </button>`).join('');
- return `${toolbar}<div class="mail operator-inbox">
+  <span class="mail-row-meta">${item.taskIds.length?item.taskIds.length+' linked action(s)':'Unlinked'}${item.messages.length>1?' · '+item.messages.length+' messages':''}</span>
+ </button></div>`).join('');
+ return `${toolbar}<div class="actions selection-bar"><label><input type="checkbox" id="select-mail" ${threads.length&&threads.every(item=>selectedThreads.has(item.key))?'checked':''}> Select visible</label><span>${threads.filter(item=>selectedThreads.has(item.key)).length} selected</span><button id="bulk-mail-action">${inboxFilter==='Trash'?'Restore selected':'Move selected to Trash'}</button></div><div class="mail operator-inbox">
   <div class="mail-list">${list||'<p class="empty">No conversations match.</p>'}</div>
   <section class="mail-body" aria-label="Conversation">${e?`<header class="conversation-header">
    <span class="muted">${thread.messages.length} ${thread.messages.length===1?'message':'messages'}</span>
    <h2>${esc(e.subject)}</h2>
    <div class="actions">
     <button class="primary" id="email-reply">${e.connectionId?'Reply':'Draft reply'}</button>
-    ${task?`<button id="open-linked">Open task · ${esc(task.title)}</button>`:`<button id="email-task">Create task</button><button id="email-link">Link task</button>`}
-    <button id="email-archive">${inboxFilter==='Archived'?'Restore to inbox':'Archive in Inboxy'}</button>
+    ${inboxFilter==='Trash'?'':'<button id="email-task">Create task</button><button id="email-link">Link task</button><button id="email-link-operation">Link operation</button>'}
+    ${!e.connectionId&&inboxFilter!=='Trash'?'<button id="email-edit">Edit captured email</button>':''}
+    <button id="email-trash">${inboxFilter==='Trash'?'Restore':'Move to Trash'}</button>
+    ${inboxFilter==='Trash'?'':`<button id="email-archive">${inboxFilter==='Archived'?'Restore to inbox':'Archive in Inboxy'}</button>`}
    </div>
   </header>
-  ${!task&&captureEmailId===e.id?composerHTML(e):''}
-  ${thread.messages.map((message,index)=>`<details class="mail-message" ${index===0?'open':''}><summary><strong>${esc(message.from)}</strong><time>${esc(fmt(message.date))}</time></summary><pre>${esc(message.body)}</pre></details>`).join('')}
+  ${tasks.map((t,index)=>`<div class="actions"><button ${index===0?'id="open-linked"':''} data-open-linked="${esc(t.id)}">${esc(t.title)}</button><button data-unlink-task="${esc(t.id)}" aria-label="Unlink ${esc(t.title)}">Unlink</button></div>`).join('')}
+  ${thread.shipmentIds.map(id=>`<span class="actions"><button data-email-operation="${esc(id)}">${esc(shipment(id)?.reference)}</button><button data-unlink-operation="${esc(id)}">Unlink operation</button></span>`).join('')}
+  ${inboxFilter==='Trash'?'':emailReview(e,reviewTasks)}
+  ${inboxFilter!=='Trash'&&captureEmailId===e.id?composerHTML(e):''}
+  ${thread.messages.map((message,index)=>`<details class="mail-message" ${index===0?'open':''}><summary><strong>${esc(message.from)}</strong><time>${esc(fmt(message.date))}</time></summary><pre>${esc(message.body)}</pre>${attachmentButtons(message)}</details>`).join('')}
   `:'<p class="muted">Select a conversation to review.</p>'}</section>
  </div>${state.drafts.length?`<details class="quick-more mailbox-drafts"><summary>Saved drafts · ${state.drafts.length}</summary>${state.drafts.map(d=>`<div class="panel"><strong>${esc(d.subject)}</strong><p class="muted">${esc(d.to)} · ${esc(fmt(d.date))}</p><p style="white-space:pre-wrap">${esc(d.body)}</p>${state.emails.some(e=>e.id===d.emailId)?`<button data-resume-draft="${esc(d.id)}">Continue draft</button>`:''}</div>`).join('')}</details>`:''}`;
 }
@@ -241,16 +271,25 @@ function bindInbox(){
  if(!search)return;
  const thread=conversations().find(item=>item.latest.id===$('.mail-row.selected')?.dataset.email);
  const e=thread?.latest;
- const task=state.tasks.find(t=>t.id===thread?.taskId);
  search.oninput=()=>{
   const caret=search.selectionStart;
   mailQuery=search.value;render();
   const next=$('#mail-search');next.focus();next.setSelectionRange(caret,caret);
  };
- document.querySelectorAll('[data-mail-filter]').forEach(button=>button.onclick=()=>{inboxFilter=button.dataset.mailFilter;render();});
- document.querySelectorAll('[data-email]').forEach(button=>button.onclick=()=>{selectedEmail=button.dataset.email;captureEmailId='';render();});
- $('#open-linked')?.addEventListener('click',()=>taskDetail(task.id));
- $('#email-task')?.addEventListener('click',()=>{captureEmailId=e.id;render();$('#inline-capture input').focus();});
+ document.querySelectorAll('[data-mail-filter]').forEach(button=>button.onclick=()=>{inboxFilter=button.dataset.mailFilter;selectedThreads.clear();render();});
+ document.querySelectorAll('[data-email]').forEach(button=>button.onclick=()=>{selectedEmail=button.dataset.email;captureEmailId='';mailActionDraft=null;render();});
+ document.querySelectorAll('[data-open-linked]').forEach(button=>button.onclick=()=>taskDetail(button.dataset.openLinked));
+ document.querySelectorAll('[data-unlink-task]').forEach(button=>button.onclick=()=>{
+  for(const message of thread.messages){message.taskIds=taskLinks(message).filter(id=>id!==button.dataset.unlinkTask);message.taskId=null;}
+  save();render();
+ });
+ document.querySelectorAll('[data-email-operation]').forEach(button=>button.onclick=()=>operationDetail(button.dataset.emailOperation));
+ document.querySelectorAll('[data-unlink-operation]').forEach(button=>button.onclick=()=>{
+  for(const message of thread.messages)message.shipmentIds=(message.shipmentIds||[]).filter(id=>id!==button.dataset.unlinkOperation);
+  save();render();
+ });
+ bindEmailActions(thread,thread?emailUpdateCandidates(thread):[]);
+ $('#email-task')?.addEventListener('click',()=>startEmailTask(e));
  $('#email-reply')?.addEventListener('click',()=>draftReply(e.id));
  $('#email-archive')?.addEventListener('click',()=>{
   const metadata=personalState('inbox-view');
@@ -268,7 +307,7 @@ function bindInbox(){
    event.preventDefault();
    const id=new FormData(event.target).get('task');
    if(!id)return toast('Create a task first.');
-   e.taskId=id;save();$('#detail').close();render();
+   addMailLink(e,id);save();$('#detail').close();render();
   };
  });
  showInboxSync();
@@ -282,12 +321,12 @@ function todayHTML(){
  </article>`).join('')||'<p class="muted">Nothing in this queue.</p>';
  const replies=list.filter(t=>pendingReply(t,threads));
  const followups=list.filter(t=>t.followUp&&+new Date(t.followUp)<=now);
- const due=list.filter(t=>t.due&&+new Date(t.due)<=now+86400000).sort((a,b)=>+new Date(a.due)-+new Date(b.due));
+ const due=list.filter(t=>deadline(t)&&dueTime(deadline(t))<=now+86400000).sort((a,b)=>dueTime(deadline(a))-dueTime(deadline(b)));
  const waiting=list.filter(t=>t.status==='Waiting'&&!replies.includes(t)&&!followups.includes(t));
  return `<div class="today-grid">
   <section class="panel"><h2>New replies <small>${replies.length}</small></h2>${rows(replies,t=>pendingReply(t,threads).subject)}</section>
   <section class="panel"><h2>Follow up <small>${followups.length}</small></h2>${rows(followups,t=>fmt(t.followUp))}</section>
-  <section class="panel"><h2>Due in 24 hours or overdue <small>${due.length}</small></h2>${rows(due,t=>fmt(t.due))}</section>
+  <section class="panel"><h2>Due in 24 hours or overdue <small>${due.length}</small></h2>${rows(due,t=>fmt(deadline(t)))}</section>
   <section class="panel"><h2>Waiting <small>${waiting.length}</small></h2>${rows(waiting,t=>t.followUp?fmt(t.followUp):'No follow-up set')}</section>
  </div>`;
 }
@@ -306,17 +345,22 @@ function bindToday(){
  });
 }
 function captureEmail(){openDialog('Capture an email',`<div class="notice">Plain-text .eml imports only; attachments and encoded email formats are not imported. You can also paste the message below.</div><p><input id="eml" type="file" accept=".eml,text/plain" aria-label="Import plain-text email"></p><form id="email-form" class="form-grid"><label class="field full">From<input name="from" required placeholder="Name <email@example.com>"></label><label class="field full">Subject<input name="subject" required></label><label class="field full">Email body<textarea name="body" required></textarea></label></form>`,`<button class="primary" type="submit" form="email-form">Capture email</button>`);$('#eml').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>1000000)return toast('Use a plain-text email under 1 MB.');try{const mail=parseEmail(await file.text());const f=$('#email-form');for(const k of ['from','subject','body'])f.elements[k].value=mail[k];toast('Email loaded — review and capture');}catch(err){toast(err.message);}};$('#email-form').onsubmit=e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));if(!data.subject.trim()||!data.body.trim())return;const email={...data,id:uid(),date:new Date().toISOString(),taskId:null};state.emails.unshift(email);selectedEmail=email.id;save();$('#detail').close();render();toast('Email captured');};}
-function linkEmail(taskId){openDialog('Link conversation',`<form id="link-form" class="form-grid"><label class="field full">Captured email<select name="email">${state.emails.filter(e=>!e.taskId||e.taskId===taskId).map(e=>`<option value="${e.id}">${esc(e.subject)}</option>`).join('')}</select></label></form>`,`<button type="submit" form="link-form" class="primary">Link email</button>`);$('#link-form').onsubmit=e=>{e.preventDefault();const email=state.emails.find(x=>x.id===new FormData(e.target).get('email'));if(!email)return toast('Capture an email first.');email.taskId=taskId;save();taskDetail(taskId);};}
+function linkEmail(taskId){openDialog('Link conversation',`<form id="link-form" class="form-grid"><label class="field full">Captured email<select name="email">${state.emails.filter(e=>!e.deletedAt&&!taskLinks(e).includes(taskId)).map(e=>`<option value="${e.id}">${esc(e.subject)}</option>`).join('')}</select></label></form>`,`<button type="submit" form="link-form" class="primary">Link email</button>`);$('#link-form').onsubmit=e=>{e.preventDefault();const email=state.emails.find(x=>x.id===new FormData(e.target).get('email'));if(!email)return toast('Capture an email first.');addMailLink(email,taskId);save();taskDetail(taskId);};}
 function draftReply(emailId,draft){const e=state.emails.find(x=>x.id===emailId);if(e?.connectionId&&cloud.workspace)return connectedReply(e,draft);openDialog('Draft a reply',`<div class="notice">This is a local draft. You can open it in your email app to review and send. Inboxy does not send or sync replies yet.</div><form id="reply-form" class="form-grid" style="margin-top:18px"><label class="field full">To<input name="to" type="email" required value="${esc(draft?.to||e.from.match(/<([^>]+)>/)?.[1]||e.from)}"></label><label class="field full">Subject<input name="subject" required value="${esc(draft?.subject||(/^re:/i.test(e.subject)?e.subject:'Re: '+e.subject))}"></label><label class="field full">Message<textarea name="body" required style="min-height:180px">${esc(draft?.body)}</textarea></label></form>`,`<button id="open-mail">Open in email app</button><button class="primary" type="submit" form="reply-form">Save draft</button>`);const read=()=>Object.fromEntries(new FormData($('#reply-form')));$('#open-mail').onclick=()=>{if(!$('#reply-form').reportValidity())return;const d=read();location.href=`mailto:${encodeURIComponent(d.to)}?subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`;};$('#reply-form').onsubmit=ev=>{ev.preventDefault();if(draft)Object.assign(draft,read(),{date:new Date().toISOString()});else state.drafts.unshift({...read(),id:uid(),emailId,date:new Date().toISOString()});save();$('#detail').close();render();toast('Draft saved locally — not sent');};}
-function shipmentsHTML(){return `<div class="shipment-grid">${state.shipments.map(s=>{const tasks=state.tasks.filter(t=>t.shipmentId===s.id),done=tasks.filter(t=>t.status==='Completed').length;return `<section class="panel"><span class="eyebrow">${esc(s.reference)}</span><h2>${esc(s.customer)}</h2><p class="muted">${esc(s.route)}<br>${esc(s.container||'No container reference')}</p><span class="badge">${esc(s.publicStatus)}</span><div class="progress"><i style="width:${tasks.length?done/tasks.length*100:0}%"></i></div><p class="muted">${done} of ${tasks.length} tasks complete · ${tasks.filter(t=>blockedBy(t,state.tasks).length).length} blocked</p><div class="actions"><button data-shipment="${s.id}">View work</button><button data-customer="${s.id}">Customer update ↗</button><button data-edit-shipment="${s.id}" aria-label="Edit ${esc(s.reference)}">Edit</button></div></section>`;}).join('')}</div>`;}
-function shipmentEditor(id){const s=shipment(id)||{reference:'',customer:'',route:'',container:'',publicStatus:'Request received',publicUpdate:'',nextUpdate:''};openDialog(id?'Edit shipment':'New shipment',`<form id="shipment-form" class="form-grid">${[['reference','Reference'],['customer','Customer'],['route','Route'],['container','Container / booking reference'],['publicStatus','Customer-facing status']].map(([k,l])=>`<label class="field">${l}<input name="${k}" value="${esc(s[k])}" ${['reference','customer','publicStatus'].includes(k)?'required':''}></label>`).join('')}<label class="field">Next customer update<input name="nextUpdate" type="datetime-local" value="${esc(s.nextUpdate)}"></label><label class="field full">Customer-facing update<textarea name="publicUpdate">${esc(s.publicUpdate)}</textarea></label></form>`,`<button class="primary" form="shipment-form" type="submit">Save shipment</button>`);$('#shipment-form').onsubmit=e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));if(!data.reference.trim()||!data.customer.trim())return;Object.keys(data).forEach(k=>data[k]=data[k].trim());if(state.shipments.some(x=>x.id!==id&&x.reference.toLowerCase()===data.reference.toLowerCase()))return toast('That shipment reference already exists.');if(id)Object.assign(s,data);else state.shipments.push({...data,id:uid()});save();$('#detail').close();render();toast('Shipment saved');};}
+function shipmentsHTML(){const matches=state.shipments.filter(s=>[s.reference,s.customer,s.route,s.container,state.clients.find(c=>c.id===s.clientId)?.name].join(' ').toLowerCase().includes(query.trim().toLowerCase()));return `<div class="shipment-grid">${matches.map(s=>{const tasks=state.tasks.filter(t=>t.shipmentId===s.id),done=tasks.filter(t=>t.status==='Completed').length;return `<section class="panel"><span class="eyebrow">${esc(s.reference)}</span><h2>${esc(s.customer)}</h2><p class="muted">${esc(s.route)}<br>${esc(s.container||'No container reference')}</p><span class="badge">${esc(s.publicStatus)}</span><div class="progress"><i style="width:${tasks.length?done/tasks.length*100:0}%"></i></div><p class="muted">${done} of ${tasks.length} tasks complete · ${tasks.filter(t=>blockedBy(t,state.tasks).length).length} blocked</p><div class="actions"><button data-shipment="${s.id}">View work</button><button data-customer="${s.id}">Customer update ↗</button><button data-edit-shipment="${s.id}" aria-label="Edit ${esc(s.reference)}">Edit</button></div></section>`;}).join('')}</div>`;}
+function shipmentEditor(id,clientId=''){const s=shipment(id)||{reference:'',customer:'',route:'',container:'',clientId,publicStatus:'Request received',publicUpdate:'',nextUpdate:''};openDialog(id?'Edit shipment':'New shipment',`<form id="shipment-form" class="form-grid"><label class="field">Client<select name="clientId">${clientOptions(s.clientId)}</select></label>${[['reference','Reference'],['customer','Customer'],['route','Route'],['container','Container / booking reference'],['publicStatus','Customer-facing status']].map(([k,l])=>`<label class="field">${l}<input name="${k}" value="${esc(s[k])}" ${['reference','publicStatus'].includes(k)?'required':''}></label>`).join('')}<label class="field">Next customer update<input name="nextUpdate" type="datetime-local" value="${esc(s.nextUpdate)}"></label><label class="field full">Customer-facing update<textarea name="publicUpdate">${esc(s.publicUpdate)}</textarea></label></form>`,`${id?'<button id="delete-operation" class="danger">Delete operation</button>':''}<button class="primary" form="shipment-form" type="submit">Save shipment</button>`);$('#delete-operation')?.addEventListener('click',()=>{
+ if(!confirm('Delete this operation? Its tasks and emails will remain in the workspace.'))return;
+ for(const t of state.tasks.filter(t=>t.shipmentId===id)){t.customer=taskCustomer(t);t.shipmentId='';t.ourReference||=s.reference;activity(t,'Operation removed');}
+ for(const mail of state.emails)mail.shipmentIds=(mail.shipmentIds||[]).filter(key=>key!==id);
+ state.shipments=state.shipments.filter(x=>x.id!==id);if(operationFilter===id)operationFilter='';save();$('#detail').close();render();
+});$('#shipment-form').onsubmit=e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));data.customer=state.clients.find(c=>c.id===data.clientId)?.name||data.customer.trim();if(!data.reference.trim()||!data.customer)return toast('Enter a reference and choose or enter a customer.');Object.keys(data).forEach(k=>data[k]=data[k].trim());if(state.shipments.some(x=>x.id!==id&&x.reference.toLowerCase()===data.reference.toLowerCase()))return toast('That shipment reference already exists.');if(id)Object.assign(s,data);else state.shipments.push({...data,id:uid()});save();$('#detail').close();render();toast('Shipment saved');};}
 function publicHTML(snapshot){return `<div class="public-preview"><div class="eyebrow">N10 LOGISTICS · SHIPMENT UPDATE</div><h2>${esc(snapshot.reference)}</h2><p class="muted">${esc(snapshot.customer)}</p><h3>${esc(snapshot.status)}</h3><p>${esc(snapshot.update||'An update will be provided shortly.')}</p>${snapshot.milestones.map(m=>`<div class="milestone"><span>${esc(m.title)}</span><strong>${esc(m.status)}</strong></div>`).join('')}<p class="muted">Next update: ${esc(fmt(snapshot.nextUpdate))}</p><small class="muted">Snapshot generated ${esc(fmt(new Date().toISOString()))}. This is not live tracking.</small></div>`;}
 function customerView(id){const s=shipment(id),snap=customerSnapshot(s,state.tasks);openDialog('Customer update preview',`<div class="notice" style="margin-bottom:18px">Only the approved fields below are exported. Internal notes, assignees, rates, email bodies, and private tasks are excluded. This version exports a snapshot; secure live links are not available yet.</div>${publicHTML(snap)}`,`<button id="edit-public">Edit update</button><button id="copy-public">Copy update</button><button id="export-public" class="primary">Download customer update</button>`);$('#edit-public').onclick=()=>shipmentEditor(id);$('#copy-public').onclick=async()=>{const text=[snap.reference+' — '+snap.customer,snap.status,snap.update,...snap.milestones.map(m=>m.title+': '+m.status),'Next update: '+fmt(snap.nextUpdate)].join('\n\n');try{await navigator.clipboard.writeText(text);toast('Customer update copied');}catch{toast('Clipboard unavailable. Download the update instead.');}};$('#export-public').onclick=()=>download(`${s.reference.replace(/[^a-z0-9_-]/gi,'-')}-update.html`,`<!doctype html><html lang="en"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Shipment update</title><style>body{font:15px/1.7 system-ui;color:#244439;max-width:650px;margin:60px auto;padding:24px}h2{font-size:30px}.milestone{display:flex;justify-content:space-between;border-bottom:1px solid #dde5dd;padding:14px 0}.muted{color:#657768}.eyebrow{font-size:12px;letter-spacing:2px}</style>${publicHTML(snap)}</html>`,'text/html');}
-function workloadHTML(){const active=state.tasks.filter(t=>t.status!=='Completed');return `<div class="notice">Workload reflects this workspace. Team queues filter work; account access is managed separately.</div><div class="shipment-grid" style="margin-top:20px">${TEAMS.map(tm=>{const list=active.filter(t=>t.team===tm);return `<section class="panel"><div class="eyebrow">${esc(tm)}</div><h2>${list.length} open tasks</h2>${USERS.filter(u=>list.some(t=>t.owner===u)).map(u=>`<div class="loadbar"><strong>${esc(u)}</strong><div class="progress"><i style="width:${Math.min(100,list.filter(t=>t.owner===u).length/Math.max(1,...USERS.map(x=>active.filter(t=>t.owner===x).length))*100)}%"></i></div><span>${list.filter(t=>t.owner===u).length} tasks</span></div>`).join('')}<p class="muted">${list.filter(t=>t.due&&new Date(t.due)<new Date()).length} overdue · ${list.filter(t=>blockedBy(t,state.tasks).length).length} blocked</p><button data-queue="${esc(tm)}">Open ${esc(tm)} queue →</button></section>`;}).join('')}</div>`;}
+function workloadHTML(){const active=state.tasks.filter(t=>t.status!=='Completed');return `<div class="notice">Workload reflects this workspace. Team queues filter work; account access is managed separately.</div><div class="shipment-grid" style="margin-top:20px">${TEAMS.map(tm=>{const list=active.filter(t=>t.team===tm);return `<section class="panel"><div class="eyebrow">${esc(tm)}</div><h2>${list.length} open tasks</h2>${USERS.filter(u=>list.some(t=>t.owner===u)).map(u=>`<div class="loadbar"><strong>${esc(u)}</strong><div class="progress"><i style="width:${Math.min(100,list.filter(t=>t.owner===u).length/Math.max(1,...USERS.map(x=>active.filter(t=>t.owner===x).length))*100)}%"></i></div><span>${list.filter(t=>t.owner===u).length} tasks</span></div>`).join('')}<p class="muted">${list.filter(t=>dueTime(deadline(t))<Date.now()).length} overdue · ${list.filter(t=>blockedBy(t,state.tasks).length).length} blocked</p><button data-queue="${esc(tm)}">Open ${esc(tm)} queue →</button></section>`;}).join('')}</div>`;}
 function settingsHTML(){return `<div class="panel"><h2>Mailbox connections</h2><div id="mail-integrations"></div></div><div class="panel"><h2>Your workspace data</h2><p class="muted">${cloud.workspace?'Changes are saved to Supabase and shared with workspace members. Export a backup whenever you need a copy.':'Changes stay in this browser. Sign in to use a shared workspace.'}</p><div class="actions"><button id="export-data">Export workspace backup</button><button id="import-data">Restore backup</button><input id="backup-file" type="file" accept="application/json,.json" hidden>${cloud.workspace?'':'<button id="reset-data" class="danger">Reset sample workspace</button>'}</div></div>`;}
 
 function download(name,content,type){const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function bindPage(){if(page==='inbox')bindInbox();if(page==='today')bindToday();if(page==='inbox'&&$('#inline-capture'))bindComposer(state.emails.find(email=>email.id===captureEmailId));if(page==='settings')renderMailPanel();$('#email-connections')?.addEventListener('click',()=>{page='settings';render();});document.querySelectorAll('[data-shipment]').forEach(b=>b.onclick=()=>{page='workspace';query=shipment(b.dataset.shipment).reference;team='All teams';owner='All owners';attention=false;render();});document.querySelectorAll('[data-customer]').forEach(b=>b.onclick=()=>customerView(b.dataset.customer));document.querySelectorAll('[data-edit-shipment]').forEach(b=>b.onclick=()=>shipmentEditor(b.dataset.editShipment));document.querySelectorAll('[data-queue]').forEach(b=>b.onclick=()=>{page='workspace';team=b.dataset.queue;attention=false;render();});$('#export-data')?.addEventListener('click',()=>download('inboxy-backup.json',JSON.stringify(state,null,2),'application/json'));$('#import-data')?.addEventListener('click',()=>$('#backup-file').click());$('#backup-file')?.addEventListener('change',async ev=>{const file=ev.target.files[0];if(!file)return;if(file.size>5000000)return toast('Backup must be under 5 MB.');try{const data=JSON.parse(await file.text());validateBackup(data);if(!confirm('Replace this workspace with this backup? Export your current data first if needed.'))return;state=migrateWorkspace(data);syncDirectory();save();render();toast('Backup restored');}catch{toast('Invalid backup. Current workspace was kept.');}});$('#reset-data')?.addEventListener('click',()=>{if(!confirm('Replace all local changes with sample data? Export a backup first if needed.'))return;state=migrateWorkspace(seed());syncDirectory();save();render();toast('Sample workspace restored');});}
+function bindPage(){if(page==='inbox')bindInbox();if(page==='today')bindToday();if(page==='inbox'&&$('#inline-capture'))bindComposer(state.emails.find(email=>email.id===captureEmailId));if(page==='settings')renderMailPanel();$('#email-connections')?.addEventListener('click',()=>{page='settings';render();});document.querySelectorAll('[data-shipment]').forEach(b=>b.onclick=()=>operationDetail(b.dataset.shipment));document.querySelectorAll('[data-customer]').forEach(b=>b.onclick=()=>customerView(b.dataset.customer));document.querySelectorAll('[data-edit-shipment]').forEach(b=>b.onclick=()=>shipmentEditor(b.dataset.editShipment));document.querySelectorAll('[data-queue]').forEach(b=>b.onclick=()=>{page='workspace';team=b.dataset.queue;attention=false;render();});$('#export-data')?.addEventListener('click',()=>download('inboxy-backup.json',JSON.stringify(state,null,2),'application/json'));$('#import-data')?.addEventListener('click',()=>$('#backup-file').click());$('#backup-file')?.addEventListener('change',async ev=>{const file=ev.target.files[0];if(!file)return;if(file.size>5000000)return toast('Backup must be under 5 MB.');try{const data=JSON.parse(await file.text());validateBackup(data);if(!confirm('Replace this workspace with this backup? Export your current data first if needed.'))return;state=migrateWorkspace(data);syncDirectory();save();render();toast('Backup restored');}catch{toast('Invalid backup. Current workspace was kept.');}});$('#reset-data')?.addEventListener('click',()=>{if(!confirm('Replace all local changes with sample data? Export a backup first if needed.'))return;state=migrateWorkspace(seed());syncDirectory();save();render();toast('Sample workspace restored');});}
 function validateBackup(data){if(data.groups&&(!Array.isArray(data.groups)||!data.groups.length||data.groups.some(g=>typeof g.id!=='string'||typeof g.name!=='string'||!g.name.trim()||typeof g.description!=='string'||!Array.isArray(g.members)||g.members.some(m=>typeof m!=='string'))||new Set(data.groups.map(g=>g.name.toLowerCase())).size!==data.groups.length))throw Error();if(data.people&&(!Array.isArray(data.people)||data.people.some(p=>typeof p.id!=='string'||typeof p.name!=='string'||typeof p.email!=='string'||!['Admin','Member'].includes(p.role))||new Set(data.people.map(p=>p.name.toLowerCase())).size!==data.people.length))throw Error();if(data.version!==1||!['tasks','shipments','emails','drafts'].every(k=>Array.isArray(data[k])))throw Error();const ids=new Set();for(const x of [...data.tasks,...data.shipments,...data.emails,...data.drafts]){if(typeof x.id!=='string'||!/^[a-zA-Z0-9-]+$/.test(x.id)||ids.has(x.id))throw Error();ids.add(x.id);}const tasks=new Set(data.tasks.map(t=>t.id)),ships=new Set(data.shipments.map(s=>s.id));for(const t of data.tasks){if(!['title','description','nextAction','owner','team','status','priority','due','followUp'].every(k=>typeof t[k]==='string')||!(data.groups?.map(g=>g.name)||DEFAULT_TEAMS).includes(t.team)||!STATUSES.includes(t.status)||!['Unassigned',...(data.people?.map(p=>p.name)||DEFAULT_USERS)].includes(t.owner)||!['Urgent','High','Normal','Low'].includes(t.priority)||!Array.isArray(t.notes)||!Array.isArray(t.activity)||!Array.isArray(t.dependencies)||t.dependencies.some(id=>!tasks.has(id))||(t.parentId&&!tasks.has(t.parentId))||(t.shipmentId&&!ships.has(t.shipmentId)))throw Error();}for(const t of data.tasks){let p=t.parentId;const seen=new Set([t.id]);while(p){if(seen.has(p))throw Error();seen.add(p);p=data.tasks.find(x=>x.id===p)?.parentId;}const walk=(id,path)=>{if(path.has(id))throw Error();const next=new Set([...path,id]);data.tasks.find(x=>x.id===id).dependencies.forEach(d=>walk(d,next));};walk(t.id,new Set());}for(const s of data.shipments)if(!['reference','customer','route','container','publicStatus','publicUpdate','nextUpdate'].every(k=>typeof s[k]==='string'))throw Error();for(const e of data.emails)if(!['from','subject','body','date'].every(k=>typeof e[k]==='string')||(e.taskId&&!tasks.has(e.taskId)))throw Error();}
 let appReady=false;startCloud(loadCloudState,()=>{appReady=true;render();});setInterval(()=>{if(appReady&&!$('#detail').open&&page==='workspace'&&document.activeElement?.tagName!=='INPUT')render();},60000);
 
@@ -391,9 +435,6 @@ function isFtzTask(task){
  const record=task.parentId?state.tasks.find(parent=>parent.id===task.parentId):task;
  return Boolean(task.ftzReference||record?.ftzReference||record?.workflow?.startsWith('FTZ · '));
 }
-function ftzReferenceField(value=''){
- return `<label class="field full">FTZ reference<input name="ftzReference" maxlength="120" value="${esc(value)}" placeholder="214, 7512, zone lot, or UIN"></label>`;
-}
 function workflowPicker(compact=false) {
  return `<label class="field full">Workflow template<select name="workflow"><option value="">${compact?'Template':'General task'}</option>${options(Object.keys(visibleTemplates()).filter(name=>!name.startsWith('FTZ · ')),'')}<optgroup label="Foreign-Trade Zone">${options(Object.keys(visibleTemplates()).filter(name=>name.startsWith('FTZ · ')),'')}</optgroup></select></label><div class="full" data-workflow-steps hidden></div>`;
 }
@@ -412,14 +453,15 @@ function addWorkflowSteps(parent, steps) {
   state.tasks.push({...newTaskRecord({title, parentId:parent.id, shipmentId:parent.shipmentId, team:parent.team, owner:parent.owner}),stepOrder});
  }
 }
-function newTaskRecord(data){return {id:uid(),title:data.title.trim(),customer:data.customer?.trim()||'',ourReference:data.ourReference?.trim()||'',customerReference:data.customerReference?.trim()||'',workflow:data.workflow||'',ftzReference:data.ftzReference?.trim()||'',team:data.team|| (team==='All teams'?TEAMS[0]:team),owner:data.owner||'Unassigned',status:data.status||'Up next',priority:data.priority||'Normal',due:data.due||'',followUp:data.followUp||'',nextAction:data.nextAction||'',description:data.description||'',shipmentId:data.shipmentId||'',parentId:data.parentId||null,dependencies:[],notes:[],activity:[{text:'Task created',date:new Date().toISOString()}],public:false,publicTitle:'',impact:false,boardOrder:state.tasks.filter(t=>t.status===(data.status||'Up next')).length};}
+function newTaskRecord(data){return {id:uid(),title:data.title.trim(),clientId:data.clientId||'',taskType:data.taskType||'',cutoff:data.cutoff||'',consequence:data.consequence||'',customer:data.customer?.trim()||'',ourReference:data.ourReference?.trim()||'',customerReference:data.customerReference?.trim()||'',workflow:data.workflow||'',ftzReference:data.ftzReference?.trim()||'',team:data.team|| (team==='All teams'?TEAMS[0]:team),owner:data.owner||'Unassigned',status:data.status||'Up next',priority:data.priority||'Normal',due:data.due||'',followUp:data.followUp||'',nextAction:data.nextAction||'',description:data.description||'',shipmentId:data.shipmentId||'',parentId:data.parentId||null,dependencies:[],notes:[],activity:[{text:'Task created',date:new Date().toISOString()}],public:false,publicTitle:'',impact:false,boardOrder:state.tasks.filter(t=>t.status===(data.status||'Up next')).length};}
 function composerHTML(email){
  return `<form id="inline-capture" class="inline-capture" data-context="${esc(email?.id||'workspace')}">
   <div class="capture-row">
-   <input name="title" aria-label="New task title" maxlength="180" required placeholder="What needs to happen?" value="${esc(email?.subject?.slice(0,180))}">
+   <input name="title" aria-label="New task title" maxlength="180" required placeholder="What needs to happen?" value="${esc((mailActionDraft?.title||email?.subject||'').slice(0,180))}">
    ${workflowPicker(true)}
    <button class="primary" type="submit">Add task</button>
   </div>
+  ${email&&mailActionDraft?composerSuggestions(mailActionDraft):''}
   ${!email&&captureStatus!=='Up next'?`<small class="capture-destination">Adding to ${esc(captureStatus)}</small>`:''}
  </form>`;
 }
@@ -436,12 +478,19 @@ function bindComposer(email){
   event.preventDefault();
   const data=new FormData(form),title=data.get('title').trim(),steps=data.getAll('workflowStep');
   if(!title)return;
-  if(email?.taskId)return toast('This email already has a task.');
+
   const status=email?'Up next':captureStatus;
   if(steps.length&&status==='Completed')return toast('Add checklist tasks to an active column.');
-  const task=newTaskRecord({title,workflow:data.get('workflow'),status,owner:owner==='All owners'?'Unassigned':owner});
+  const draft=email?mailActionDraft:null;
+  const confirmed=draft&&form.elements.applySuggestions?.checked?{...draft}:{};
+  if(form.elements.applySuggestions?.checked)for(const element of form.querySelectorAll('[data-suggested-field]'))confirmed[element.dataset.suggestedField]=element.value;
+  const task=newTaskRecord({title,workflow:data.get('workflow'),status,owner:scope==='My next actions'?(myOwner()||'Unassigned'):owner==='All owners'?'Unassigned':owner,shipmentId:operationFilter,taskType:typeFilter,...confirmed});
+  if(email&&draft?.requestKey){
+   if(state.tasks.some(item=>item.requestKey===draft.requestKey))return toast('This request already has a task.');
+   task.requestKey=draft.requestKey;
+  }
   state.tasks.push(task);addWorkflowSteps(task,steps);
-  if(email){email.taskId=task.id;captureEmailId='';}
+  if(email){addMailLink(email,task.id);captureEmailId='';mailActionDraft=null;}
   else captureStatus='Up next';
   form.reset();form.elements.workflow.onchange();
   save();render();
@@ -452,7 +501,13 @@ function bindComposer(email){
 }
 function taskProperties(task){
  const fields=[
-  ['priority','Priority',task.priority,options(['Urgent','High','Normal','Low'],task.priority)],
+  ['priority','Priority',task.priority+(task.priorityOverride?' · Manual':''),options(priorities,task.priority)],
+  ['taskType','Type',task.taskType,options(['',...state.taskTypes],task.taskType||'')],
+  ['team','Department',task.team,options(TEAMS,task.team)],
+  ['clientId','Client',state.clients.find(item=>item.id===task.clientId)?.name,clientOptions(task.clientId)],
+  ['shipmentId','Operation',shipment(task.shipmentId)?.reference,operationOptions(task.shipmentId)],
+  ['consequence','Consequence',task.consequence],
+  ['description','Instructions',task.description],
   ['customer','Customer',taskCustomer(task)],
   ['ourReference','Our ref',task.ourReference],
   ['customerReference','Customer ref',task.customerReference],
@@ -463,14 +518,14 @@ function taskProperties(task){
    <label class="field">Status<select name="status">${options(STATUSES,task.status)}</select></label>
    <label class="field">Owner<select name="owner">${options(USERS,task.owner)}</select></label>
    ${task.status==='Waiting'?`<label class="field">Waiting on<input name="waitingOn" maxlength="120" placeholder="Person or missing item" value="${esc(task.waitingOn)}"></label>`:''}
-   <label class="field">Due<input type="datetime-local" name="due" value="${esc(task.due)}"></label>
+   <label class="field">Requested by<input type="datetime-local" name="due" value="${esc(dateOnly(task.due)?task.due+'T23:59':task.due)}"></label><label class="field">Hard cutoff<input type="datetime-local" name="cutoff" value="${esc(task.cutoff)}"></label>
   </div>
   <div class="actions task-property-chips">${fields.map(([key,label,value])=>`<button type="button" data-property="${key}" data-label="${label}" title="${esc(value||label)}" aria-expanded="false">${esc(value?label+' · '+value:'+ '+label)}</button>`).join('')}</div>
   <div class="task-property-fields">
    ${fields.map(([key,label,,choices])=>`<label class="field" hidden>${label}${choices?`<select name="${key}">${choices}</select>`:`<input name="${key}" maxlength="120" value="${esc(task[key])}">`}</label>`).join('')}
    <label class="field" hidden>Reminder<input type="datetime-local" name="followUp" value="${esc(task.followUp)}"></label>
   </div>
-  <label class="field task-next-field">Next action<input name="nextAction" maxlength="180" value="${esc(task.nextAction)}" placeholder="${esc(nextAction(task)||'What happens next?')}"></label>
+  <label class="field task-next-field">Title<input name="title" required maxlength="180" value="${esc(task.title)}"></label><label class="field task-next-field">Next action<input name="nextAction" maxlength="180" value="${esc(task.nextAction)}" placeholder="${esc(nextAction(task)||'What happens next?')}"></label>
  </div>`;
 }
 function applyBoardMove(id,status,beforeId=null){const t=state.tasks.find(t=>t.id===id);if(!t)return;const old=t.status;const issue=moveTask(state.tasks,id,status,beforeId);if(issue){toast(issue);render();return;}activity(t,old===status?'Reordered on board':`Moved from ${old} to ${status}`);save();render();toast(old===status?'Card reordered':`Moved to ${status}`);}
@@ -479,7 +534,7 @@ function dropTarget(x,y){const el=document.elementFromPoint(x,y);const col=el?.c
 function clearDrag(){dragId=null;dragGhost?.remove();dragGhost=null;dragStart=null;dragLast=null;cancelAnimationFrame(dragFrame);dragFrame=null;document.body.classList.remove('is-dragging');document.querySelectorAll('.drop-over,.drag-source,.drop-before,.drop-at-end').forEach(e=>e.classList.remove('drop-over','drag-source','drop-before','drop-at-end'));}
 function bindBoard(){
  document.querySelectorAll('[data-add-status]').forEach(b=>b.onclick=()=>focusComposer(b.dataset.addStatus));
- document.querySelectorAll('[data-quick-status]').forEach(f=>f.onsubmit=e=>{e.preventDefault();const title=new FormData(f).get('title').trim();if(!title)return;const status=f.dataset.quickStatus;state.tasks.push(newTaskRecord({title,status,owner:owner==='All owners'?'Unassigned':owner}));save();render();const input=[...document.querySelectorAll('[data-quick-status]')].find(x=>x.dataset.quickStatus===status)?.querySelector('input');input?.focus();toast('Task created — click NEXT to add the next action');});
+ document.querySelectorAll('[data-quick-status]').forEach(f=>f.onsubmit=e=>{e.preventDefault();const title=new FormData(f).get('title').trim();if(!title)return;const status=f.dataset.quickStatus;state.tasks.push(newTaskRecord({title,status,shipmentId:operationFilter,owner:owner==='All owners'?'Unassigned':owner}));save();render();const input=[...document.querySelectorAll('[data-quick-status]')].find(x=>x.dataset.quickStatus===status)?.querySelector('input');input?.focus();toast('Task created — click NEXT to add the next action');});
  document.querySelectorAll('[data-quick-edit]').forEach(b=>b.onclick=()=>taskDetail(b.dataset.quickEdit,b.dataset.field));
  document.querySelectorAll('[data-card-email]').forEach(b=>b.onclick=()=>taskDetail(b.dataset.cardEmail));
  document.querySelectorAll('[data-move]').forEach(s=>s.onchange=()=>applyBoardMove(s.dataset.move,s.value));
@@ -498,7 +553,7 @@ function paintDrop(target){
 }
 
 function loadCloudState(snapshot){const params=new URL(location.href).searchParams,result=params.get('mail');if(result){page='settings';history.replaceState(null,'',location.pathname);if(result==='complete'){const args={provider:params.get('mail_provider'),code:params.get('mail_code'),state:params.get('mail_state')};setTimeout(()=>mailAction('complete',args).then(()=>{mailboxStatusCache=null;renderMailPanel();openDialog('Mailbox connected','<p>Choose Sync inbox next to your connected account to import recent messages into this shared workspace.</p>','<button id="mail-show-account" class="primary">View connected accounts</button>');$('#mail-show-account').onclick=()=>$('#detail').close();}).catch(e=>openDialog('Mailbox connection did not finish',`<p>${esc(e.message)}</p><p>The mailbox was not connected. Share this error text so we can identify the cause.</p>`)),0);}else setTimeout(()=>toast(result==='cancelled'?'Mailbox connection cancelled.':'Mailbox connection failed. Check the provider setup and try again.'),100);}
- appReady=true;state=snapshot;syncDirectory();if(!state.emails.some(email=>email.id===selectedEmail))selectedEmail=state.emails[0]?.id;render();
+ appReady=true;state=migrateWorkspace(snapshot);syncDirectory();if(!state.emails.some(email=>email.id===selectedEmail))selectedEmail=state.emails[0]?.id;render();
 }
 function cloudSaveError(error){
  openDialog('Your changes need attention',`<p>${esc(error.message)}</p><p>Keep this tab open. Download your unsaved work before reloading. The server copy has not been overwritten.</p>`,`<button id="save-recovery">Download unsaved work</button><button id="reload-cloud">Reload server copy</button>`);
@@ -595,4 +650,362 @@ async function connectedReply(email,draft){
  openDialog('Reply by email',`<p class="notice">This will send a real email from the connected mailbox. Review the recipient and message before sending.</p><form id="connected-reply" class="form-grid"><label class="field full">To<input name="to" type="email" required value="${esc(draft?.to||recipient)}"></label><label class="field full">Subject<input name="subject" required value="${esc(draft?.subject||(/^re:/i.test(email.subject)?email.subject:'Re: '+email.subject))}"></label><label class="field full">Message<textarea name="body" required maxlength="50000" style="min-height:180px">${esc(draft?.body)}</textarea></label></form>`,'<button id="keep-reply-draft">Save draft</button><button class="primary" type="submit" form="connected-reply">Send reply</button>');
  $('#keep-reply-draft').onclick=()=>{const f=Object.fromEntries(new FormData($('#connected-reply')));if(draft)Object.assign(draft,f,{date:new Date().toISOString()});else state.drafts.unshift({...f,id:uid(),emailId:email.id,date:new Date().toISOString()});save();$('#detail').close();toast('Reply draft saved — not sent');};
  $('#connected-reply').onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));const buttons=$('#detail').querySelectorAll('button');buttons.forEach(b=>b.disabled=true);try{await mailAction('reply',{connection:email.connectionId,email:email.id,...f});if(draft){state.drafts=state.drafts.filter(d=>d.id!==draft.id);save();}$('#detail').close();render();toast('Reply sent');}catch(err){toast('Reply not confirmed: '+err.message+'. Check your Sent folder before trying again.');buttons.forEach(b=>b.disabled=false);}};
+}
+
+function myOwner(){
+ return cloud.workspace?state.people.find(p=>p.email.toLowerCase()===cloud.user?.email?.toLowerCase())?.name:'Ignacio';
+}
+function clientOptions(id){
+ return '<option value="">No linked client</option>'+state.clients.map(c=>`<option value="${esc(c.id)}" ${c.id===id?'selected':''}>${esc(c.name)}</option>`).join('');
+}
+function operationOptions(id){
+ return '<option value="">Any / standalone</option>'+state.shipments.map(s=>`<option value="${esc(s.id)}" ${s.id===id?'selected':''}>${esc(s.reference)}</option>`).join('');
+}
+function planningBar(){
+ const saved=personalState('saved-views');
+ return `<div class="planning-bar actions">
+  <select id="planning-scope" aria-label="Work scope">${options(['All tasks','My next actions','Team overview'],scope)}</select>
+  <select id="planning-group" aria-label="Group tasks">${options(['None','By task type','By client','By shipment'],groupBy)}</select>
+  <select id="type-filter" aria-label="Task type"><option value="">All types</option>${options(state.taskTypes,typeFilter)}</select>
+  <select id="priority-filter" aria-label="Priority filter"><option value="">All priorities</option>${options(priorities,priorityFilter)}</select>
+  <select id="operation-filter" aria-label="Operation">${operationOptions(operationFilter)}</select>
+  <select id="saved-view" aria-label="Saved views"><option value="">Saved views</option>${options(Object.keys(saved),'')}</select>
+  <button id="save-view">Save view</button>${Object.keys(saved).length?'<button id="manage-views">Manage views</button>':''}<button id="manage-types">Task types</button>
+  <button id="manage-clients">Clients</button>
+ </div>`;
+}
+function groupLabel(task){
+ if(scope==='Team overview'){
+  if(task.status==='Completed')return 'Completed';
+  if(deadline(task)&&dueTime(deadline(task))<=Date.now()+86400000)return 'At risk / Due within 24h';
+  if(task.owner==='Unassigned')return 'Unassigned';
+  if(task.status==='Waiting')return 'Waiting';
+  return task.status;
+ }
+ return {'By task type':task.taskType||'No type','By client':taskCustomer(task)||'No client',
+  'By shipment':shipment(task.shipmentId)?.reference||'Standalone'}[groupBy]||'';
+}
+function taskTable(list){
+ const done=state.tasks.filter(t=>t.status==='Completed').length;
+ const counts=scope==='Team overview'?`<div class="notice">${done} completed · ${state.tasks.length-done} pending · ${state.tasks.filter(t=>t.status!=='Completed'&&blockedBy(t,state.tasks).length).length} blocked · ${state.tasks.filter(t=>t.status!=='Completed'&&workQueues.Overdue(t,Date.now())).length} overdue · ${state.tasks.filter(t=>t.status!=='Completed'&&workQueues['Due within 24h'](t,Date.now())&&!workQueues.Overdue(t,Date.now())).length} upcoming<br>${TEAMS.map(name=>esc(name)+' '+state.tasks.filter(t=>t.team===name&&t.status!=='Completed').length).join(' · ')}</div>`:'';
+ const bulk=`<div class="actions selection-bar"><label><input type="checkbox" id="select-tasks" ${list.length&&list.every(t=>selectedTasks.has(t.id))?'checked':''}> Select visible</label><span>${list.filter(t=>selectedTasks.has(t.id)).length} selected</span><select id="bulk-owner" aria-label="Assign selected tasks"><option value="">Assign selected…</option>${options(USERS,'')}</select><select id="bulk-status" aria-label="Change selected status"><option value="">Move selected…</option>${options(STATUSES,'')}</select><button class="danger" id="bulk-delete">Delete selected</button></div>`;
+ const groups=new Map();
+ for(const task of list){const label=groupLabel(task);if(!groups.has(label))groups.set(label,[]);groups.get(label).push(task);}
+ return counts+bulk+([...groups].map(([label,tasks])=>`${label?`<h3 class="task-group-label">${esc(label)} <small>${tasks.length}</small></h3>`:''}<div class="table-wrap"><table><thead><tr><th></th><th>Task / next action</th><th>Client / reference</th><th>Department / owner</th><th>Status</th><th>Deadline</th><th>Priority / follow-up</th></tr></thead><tbody>${tasks.map(t=>`<tr tabindex="0" data-task="${esc(t.id)}">
+  <td><input type="checkbox" data-select-task="${esc(t.id)}" aria-label="Select ${esc(t.title)}" ${selectedTasks.has(t.id)?'checked':''}></td>
+  <td><strong>${esc(t.title)}</strong><p class="muted">${esc(nextAction(t)||t.taskType||'')}</p></td>
+  <td>${esc(taskCustomer(t)||'—')}<br><small>${esc(taskReferences(t).join(' · '))}</small></td>
+  <td>${esc(t.team)}<select data-row-field="owner" aria-label="Owner">${options(USERS,t.owner)}</select>
+   ${t.owner==='Unassigned'&&myOwner()?'<button data-claim>Claim</button>':''}</td>
+  <td><select data-row-field="status" aria-label="Status">${options(STATUSES,t.status)}</select>
+  ${t.status==='Waiting'?`<input data-row-field="waitingOn" aria-label="Waiting on" placeholder="Waiting on…" value="${esc(t.waitingOn)}">`:''}</td>
+  <td><button data-row-dates="${esc(t.id)}" data-date-kind="deadline">${esc(t.cutoff?'Cutoff · '+fmt(t.cutoff):t.due?fmt(t.due):'Set date')}</button></td>
+  <td><select data-row-field="priority" aria-label="Priority">${options(priorities,t.priority)}</select><button data-row-dates="${esc(t.id)}" data-date-kind="followUp">${t.followUp?esc(fmt(t.followUp)):'Remind'}</button><small class="row-reason">${esc(priority(t,state.tasks).reasons.join(' · '))}</small></td>
+ </tr>`).join('')}</tbody></table></div>`).join('')||'<div class="panel empty">No tasks match these filters.</div>');
+}
+function bindPlanning(){
+ if(page!=='workspace')return;
+ const change=(id,fn)=>$('#'+id)?.addEventListener('change',e=>{fn(e.target.value);selectedTasks.clear();render();});
+ change('planning-scope',value=>{scope=value;view='List';});
+ change('planning-group',value=>{groupBy=value;scope='All tasks';view='List';});
+ change('type-filter',value=>typeFilter=value);
+ change('priority-filter',value=>priorityFilter=value);
+ change('operation-filter',value=>operationFilter=value);
+ change('saved-view',value=>{
+  const saved=personalState('saved-views')[value];
+  if(!saved)return;
+  ({view,scope,groupBy,team,owner,customerFilter,statusFilter,dueFilter,typeFilter,priorityFilter,operationFilter,workQueue,ftzOnly,query}=saved);
+ });
+ $('#save-view')?.addEventListener('click',()=>{
+  const title=prompt('Name this view')?.trim();if(!title)return;
+  setPersonalState('saved-views',{...personalState('saved-views'),[title]:{view,scope,groupBy,team,owner,customerFilter,statusFilter,dueFilter,typeFilter,priorityFilter,operationFilter,workQueue,ftzOnly,query}});render();
+ });
+ $('#manage-views')?.addEventListener('click',()=>{
+  const saved=personalState('saved-views');
+  openDialog('Saved views',Object.keys(saved).map(title=>`<div class="section-title"><span>${esc(title)}</span><button data-delete-view="${esc(title)}">Remove</button></div>`).join(''));
+  document.querySelectorAll('[data-delete-view]').forEach(button=>button.onclick=()=>{
+   delete saved[button.dataset.deleteView];setPersonalState('saved-views',saved);$('#detail').close();render();
+  });
+ });
+ $('#manage-types')?.addEventListener('click',typeDirectory);
+ $('#manage-clients')?.addEventListener('click',clientDirectory);
+ const visible=()=>filtered().filter(t=>view!=='Do next'||t.status!=='Completed');
+ const ids=()=>visible().filter(t=>selectedTasks.has(t.id)).map(t=>t.id);
+ $('#select-tasks')?.addEventListener('change',e=>{visible().forEach(t=>e.target.checked?selectedTasks.add(t.id):selectedTasks.delete(t.id));render();});
+ document.querySelectorAll('[data-select-task]').forEach(control=>control.onchange=()=>{control.checked?selectedTasks.add(control.dataset.selectTask):selectedTasks.delete(control.dataset.selectTask);render();});
+ document.querySelectorAll('[data-row-field],[data-claim]').forEach(control=>{
+  const task=state.tasks.find(t=>t.id===control.closest('[data-task]').dataset.task);
+  if(control.hasAttribute('data-claim'))control.onclick=()=>editRows([task.id],'owner',myOwner());
+  else control.onchange=()=>editRows([task.id],control.dataset.rowField,control.value);
+ });
+ document.querySelectorAll('[data-row-dates]').forEach(button=>button.onclick=()=>rowDates(button));
+ $('#bulk-owner')?.addEventListener('change',e=>editRows(ids(),'owner',e.target.value));
+ $('#bulk-status')?.addEventListener('change',e=>editRows(ids(),'status',e.target.value));
+ $('#bulk-delete')?.addEventListener('click',()=>confirmTaskDeletion(ids()));
+}
+function editRows(ids,key,value){
+ if(!ids.length){render();return toast('Select at least one task.');}
+ if(!value&&key!=='waitingOn')return;
+ const skipped=[];
+ for(const id of ids){
+  const task=state.tasks.find(t=>t.id===id);
+  if(key==='status'){
+   const issue=moveTask(state.tasks,id,value);
+   if(issue){skipped.push(task.title+' · '+issue);continue;}
+  }else task[key]=value.trim();
+  if(key==='priority')task.priorityOverride=true;
+  activity(task,'Updated '+(key==='waitingOn'?'waiting on':key));
+ }
+ save();render();
+ if(skipped.length)toast(skipped.join(' / '));
+}
+function confirmTaskDeletion(ids){
+ if(!ids.length)return toast('Select at least one task.');
+ openDialog('Delete '+(ids.length===1?'task':ids.length+' tasks'),'<p>Subtasks become standalone actions and linked emails stay in the inbox. This deletes the selected tasks and their history.</p>','<button class="danger" id="confirm-delete-tasks">Delete tasks</button>');
+ $('#confirm-delete-tasks').onclick=()=>{
+  const chosen=new Set(ids);
+  state.tasks=state.tasks.filter(t=>!chosen.has(t.id));
+  for(const task of state.tasks){
+   if(chosen.has(task.parentId))task.parentId=null;
+   task.dependencies=task.dependencies.filter(id=>!chosen.has(id));
+  }
+  for(const email of state.emails){
+   email.taskIds=taskLinks(email).filter(id=>!chosen.has(id));email.taskId=null;
+  }
+  ids.forEach(id=>selectedTasks.delete(id));save();$('#detail').close();render();
+ };
+}
+function typeDirectory(){
+ openDialog('Task types',`<div class="inline-form"><input id="type-name" maxlength="60" placeholder="New task type" aria-label="New task type"><button id="add-type">Add</button></div>
+ ${state.taskTypes.map((type,i)=>`<div class="inline-form"><input data-type-name="${i}" aria-label="Rename ${esc(type)}" maxlength="60" value="${esc(type)}"><button data-delete-type="${i}" class="danger">Delete</button></div>`).join('')}`);
+ const update=(value,index)=>{
+  const previous=state.taskTypes[index],name=value.trim();
+  if(name&&state.taskTypes.some((type,i)=>i!==index&&name.toLowerCase()===type.toLowerCase()))return toast('That type already exists.');
+  if(previous){
+   if(name)state.taskTypes[index]=name;else state.taskTypes.splice(index,1);
+   state.tasks.filter(t=>t.taskType===previous).forEach(t=>t.taskType=name);
+   if(typeFilter===previous)typeFilter=name;
+  }else if(name)state.taskTypes.push(name);else return;
+  save();render();typeDirectory();
+ };
+ $('#add-type').onclick=()=>update($('#type-name').value,-1);
+ document.querySelectorAll('[data-type-name]').forEach(input=>input.onchange=()=>{if(input.value.trim())update(input.value,+input.dataset.typeName);});
+ document.querySelectorAll('[data-delete-type]').forEach(button=>button.onclick=()=>update('',+button.dataset.deleteType));
+}
+function clientDirectory(){
+ openDialog('Clients',`<input type="search" id="client-search" placeholder="Find a client" aria-label="Find a client">
+  <div id="client-directory">${state.clients.map(c=>`<div class="section-title client-row" data-client-name="${esc(c.name.toLowerCase())}"><button data-client-work="${esc(c.id)}">${esc(c.name)}</button><button data-edit-client="${esc(c.id)}">Edit</button></div>`).join('')}</div>`,'<button class="primary" id="new-client">New client</button>');
+ $('#client-search').oninput=e=>document.querySelectorAll('[data-client-name]').forEach(row=>row.hidden=!row.dataset.clientName.includes(e.target.value.trim().toLowerCase()));
+ $('#new-client').onclick=()=>clientEditor();
+ document.querySelectorAll('[data-edit-client]').forEach(b=>b.onclick=()=>clientEditor(b.dataset.editClient));
+ document.querySelectorAll('[data-client-work]').forEach(b=>b.onclick=()=>{
+  const client=state.clients.find(c=>c.id===b.dataset.clientWork);
+  openDialog(esc(client.name),`<div class="section-title"><h3>Operations</h3><button id="client-new-operation">New operation</button></div>${state.shipments.filter(s=>s.clientId===client.id||s.customer===client.name).map(s=>`<p><button data-open-operation="${esc(s.id)}">${esc(s.reference)}</button></p>`).join('')}<h3>Tasks</h3>${state.tasks.filter(t=>taskCustomer(t)===client.name).map(t=>`<p><button data-client-task="${esc(t.id)}">${esc(t.title)}</button> ${esc(t.status)}</p>`).join('')}`);
+  $('#client-new-operation').onclick=()=>shipmentEditor(null,client.id);
+  document.querySelectorAll('[data-client-task]').forEach(button=>button.onclick=()=>taskDetail(button.dataset.clientTask));
+  document.querySelectorAll('[data-open-operation]').forEach(button=>button.onclick=()=>operationDetail(button.dataset.openOperation));
+ });
+}
+function clientEditor(id){
+ const client=state.clients.find(c=>c.id===id);
+ openDialog(client?'Edit client':'New client',`<div class="task-properties">
+  <label class="field">Name<input id="client-name" maxlength="120" value="${esc(client?.name)}"></label>
+  <label class="field">Email domain<input id="client-domain" maxlength="150" placeholder="example.com" value="${esc(client?.domain)}"></label>
+  <label class="field">Service commitments<input id="client-service" maxlength="240" value="${esc(client?.service)}"></label>
+ </div>`,`${client?'<button class="danger" id="delete-client">Delete client</button>':''}<button class="primary" id="save-client">Save client</button>`);
+ $('#save-client').onclick=()=>{
+  const name=$('#client-name').value.trim(),domain=$('#client-domain').value.trim().toLowerCase();
+  if(!name||state.clients.some(c=>c.id!==id&&(c.name.toLowerCase()===name.toLowerCase()||(domain&&c.domain===domain))))return toast('Enter a unique name and email domain.');
+  if(domain&&!/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(domain))return toast('Enter a domain such as example.com.');
+  const values={name,domain,service:$('#client-service').value.trim()};
+  if(client)Object.assign(client,values);else state.clients.push({id:uid(),...values});
+  save();render();clientDirectory();
+ };
+ $('#delete-client')?.addEventListener('click',()=>{
+  if(!confirm('Delete this client? Its name stays on linked tasks and operations.'))return;
+  for(const item of [...state.tasks,...state.shipments])if(item.clientId===id){item.customer=client.name;item.clientId='';}
+  state.clients=state.clients.filter(c=>c.id!==id);save();render();clientDirectory();
+ });
+}
+function addMailLink(message,id){
+ message.taskIds=[...new Set([...taskLinks(message),id])];
+ message.taskId??=id;
+}
+function startEmailTask(message,title,requestKey){
+ const {requests:_,...suggested}=mailSuggestions(message,state);
+ const taskType=suggestTaskType(title||message.subject,state.taskTypes);
+ const teams={'AES filing':'Ops',Pickup:'Ops',Documentation:'Ops','Inventory report':'Warehouse','Cargo release':'Warehouse'};
+ const department=TEAMS.includes(teams[taskType])?teams[taskType]:'';
+ const assignees=state.groups.find(item=>item.name===department)?.members||[];
+ mailActionDraft={...suggested,taskType,title,requestKey,...(department?{team:department}:{}),...(assignees.length===1?{owner:assignees[0]}:{})};
+ captureEmailId=message.id;render();$('#inline-capture input').focus();
+}
+function composerSuggestions(draft){
+ const values=[['Client',state.clients.find(c=>c.id===draft.clientId)?.name],['Operation',shipment(draft.shipmentId)?.reference],
+  ['Our ref',draft.ourReference],['Customer ref',draft.customerReference],['Type',draft.taskType],['Department',draft.team],
+  ['Owner',draft.owner],['Requested by',draft.due&&fmt(draft.due)],['Cutoff',draft.cutoff&&fmt(draft.cutoff)]];
+ const text=values.filter(([,value])=>value).map(([label,value])=>label+' · '+value).join('  |  ');
+ return text?`<label class="check-row"><input type="checkbox" name="applySuggestions"> Use suggestions</label><small>${esc(text)}</small>
+ <details class="quick-more"><summary>Correct suggestions</summary><div class="task-properties">
+ ${values.map(([label],index)=>{
+  const key=['clientId','shipmentId','ourReference','customerReference','taskType','team','owner','due','cutoff'][index];
+  const choices={clientId:clientOptions(draft.clientId),shipmentId:operationOptions(draft.shipmentId),
+   taskType:options(['',...state.taskTypes],draft.taskType),team:options(['',...TEAMS],draft.team||''),owner:options(USERS,draft.owner||'Unassigned')}[key];
+  const control=choices?`<select data-suggested-field="${key}">${choices}</select>`:
+   `<input data-suggested-field="${key}" type="${['due','cutoff'].includes(key)?'datetime-local':'text'}" maxlength="120" value="${esc(draft[key])}">`;
+  return `<label class="field">${label}${control}</label>`;
+ }).join('')}</div></details>`:'';
+}
+function emailUpdateCandidates(thread){
+ const suggested=mailSuggestions(thread.latest,state);
+ return state.tasks.filter(t=>thread.taskIds.includes(t.id)||t.status!=='Completed'&&(
+  (suggested.shipmentId&&t.shipmentId===suggested.shipmentId)||
+  (suggested.ourReference&&taskReferences(t).some(ref=>ref.toLowerCase()===suggested.ourReference.toLowerCase()))
+ ));
+}
+function emailReview(message,tasks){
+ const {requests}=mailSuggestions(message,state);
+ if(!requests.length)return '<p class="muted">No clear action detected in this message.</p>';
+ return `<details class="quick-more" open><summary>Review requests · ${requests.length}</summary>${requests.map((request,index)=>{
+  const existing=state.tasks.find(task=>task.requestKey===message.id+':'+index);
+  return `<div class="request-row"><span>${esc(request)}</span>${existing?'<small>Task already created</small>':tasks.length?`<button data-review-request="${index}">Review update</button><button data-new-request="${index}">New action</button>`:`<button data-new-request="${index}">Create action</button>`}</div>`;
+ }).join('')}</details>`;
+}
+function bindEmailActions(thread,tasks){
+ const chosen=()=>[...document.querySelectorAll('[data-select-mail]:checked')].map(control=>control.dataset.selectMail);
+ const trash=inboxFilter==='Trash';
+ const bulk=$('#bulk-mail-action');
+ const changeTrash=(keys)=>{
+  if(!keys.length)return toast('Select one or more conversations.');
+  const now=new Date().toISOString();
+  for(const mail of state.emails)if(keys.includes(mailKey(mail)))mail.deletedAt=trash?'':now;
+  selectedThreads.clear();captureEmailId='';mailActionDraft=null;save();render();
+  toast(trash?'Conversation restored':'Moved to Inboxy Trash');
+ };
+ bulk.onclick=()=>changeTrash(chosen());
+ $('#select-mail').onchange=event=>{
+  document.querySelectorAll('[data-select-mail]').forEach(control=>event.target.checked?selectedThreads.add(control.dataset.selectMail):selectedThreads.delete(control.dataset.selectMail));render();
+ };
+ document.querySelectorAll('[data-select-mail]').forEach(control=>control.onchange=()=>{control.checked?selectedThreads.add(control.dataset.selectMail):selectedThreads.delete(control.dataset.selectMail);render();});
+ if(!thread)return;
+ const email=thread.latest;
+ $('#email-trash').onclick=()=>changeTrash([thread.key]);
+ const suggestions=mailSuggestions(email,state);
+ document.querySelectorAll('[data-new-request]').forEach(button=>button.onclick=()=>startEmailTask(email,suggestions.requests[+button.dataset.newRequest],email.id+':'+button.dataset.newRequest));
+ document.querySelectorAll('[data-review-request]').forEach(button=>button.onclick=()=>reviewRequest(email,tasks,suggestions,suggestions.requests[+button.dataset.reviewRequest]));
+ $('#email-link-operation')?.addEventListener('click',()=>{
+  openDialog('Link operation',`<select id="mail-operation" aria-label="Operation">${operationOptions('')}</select>`,'<button class="primary" id="confirm-mail-operation">Link</button>');
+  $('#confirm-mail-operation').onclick=()=>{
+   const id=$('#mail-operation').value;if(!id)return toast('Choose an operation.');
+   email.shipmentIds=[...new Set([...(email.shipmentIds||[]),id])];save();$('#detail').close();render();
+  };
+ });
+ $('#email-edit')?.addEventListener('click',()=>{
+  openDialog('Captured email',`<label class="field">Sender<input id="mail-edit-from" value="${esc(email.from)}"></label><label class="field">Subject<input id="mail-edit-subject" value="${esc(email.subject)}"></label><label class="field">Message<textarea id="mail-edit-body">${esc(email.body)}</textarea></label>`,'<button id="save-email-edits" class="primary">Save</button>');
+  $('#save-email-edits').onclick=()=>{
+   const from=$('#mail-edit-from').value.trim(),subject=$('#mail-edit-subject').value.trim();
+   if(!from||!subject)return toast('Enter the sender and subject.');
+   Object.assign(email,{from,subject,body:$('#mail-edit-body').value});save();$('#detail').close();render();
+  };
+ });
+ bindAttachments();
+}
+function reviewRequest(email,tasks,suggestions,request){
+ openDialog('Review customer instructions',`<div class="note"><strong>${esc(email.subject)}</strong><small>${esc(email.from)} · ${esc(fmt(email.date))}</small><p>${esc(request)}</p></div>
+  <label class="field">Apply to<select id="update-target">${tasks.map(t=>`<option value="${esc(t.id)}">${esc(t.title)}</option>`).join('')}</select></label><div id="proposed-updates"></div>`,'<button id="apply-mail-update" class="primary">Apply selected changes</button>');
+ const current=()=>tasks.find(t=>t.id===$('#update-target').value);
+ const values={nextAction:request.slice(0,180),due:suggestions.due,cutoff:suggestions.cutoff};
+ const labels={nextAction:'Next action',due:'Requested by',cutoff:'Hard cutoff'};
+ const show=()=>$('#proposed-updates').innerHTML=Object.entries(values).filter(([key,value])=>value&&current()[key]!==value).map(([key,value])=>`<label class="check-row"><input type="checkbox" data-confirm-change="${key}"><span><strong>${labels[key]}</strong><br>Current: ${esc(current()[key]||'—')}<br>Proposed: ${esc(value)}</span></label>`).join('')||'<p>No changes detected.</p>';
+ $('#update-target').onchange=show;show();
+ $('#apply-mail-update').onclick=()=>{
+  const selected=[...document.querySelectorAll('[data-confirm-change]:checked')];
+  if(!selected.length)return toast('Select the changes to apply.');
+  const task=current();
+  for(const checkbox of selected){const key=checkbox.dataset.confirmChange;task[key]=values[key];}
+  addMailLink(email,task.id);task.mailReviewedAt=new Date().toISOString();
+  const changes=selected.map(box=>labels[box.dataset.confirmChange]).join(', ');
+  activity(task,'Approved '+changes+' from “'+email.subject+'”');
+  task.activity[0].emailId=email.id;
+  save();render();taskDetail(task.id);
+ };
+}
+function operationDetail(id){
+ const operation=shipment(id);if(!operation)return;
+ const tasks=state.tasks.filter(task=>task.shipmentId===id);
+ const threads=conversations().filter(thread=>thread.shipmentIds.includes(id)||tasks.some(task=>thread.taskIds.includes(task.id)));
+ openDialog(esc(operation.reference),`<p class="muted">${esc(state.clients.find(c=>c.id===operation.clientId)?.name||operation.customer)} · ${esc(operation.route)}</p>
+  <h3>Tasks</h3>${tasks.map(t=>`<div class="section-title"><button data-operation-task="${esc(t.id)}">${esc(t.title)}</button><small>${esc(t.owner)} · ${esc(t.status)}</small></div>`).join('')||'<p>No tasks yet.</p>'}
+  <div class="section-title"><h3>Documents</h3><button id="add-operation-document">Link document</button></div>
+  ${(operation.documents||[]).filter(doc=>safeDocumentURL(doc.url)).map(doc=>`<div class="section-title"><a href="${esc(doc.url)}" target="_blank" rel="noopener noreferrer">${esc(doc.name)}</a><button data-edit-document="${esc(doc.id)}">Edit</button></div>`).join('')||'<p>No document links yet.</p>'}
+  <h3>Conversations and attachments</h3>${threads.map(thread=>`<div class="note"><button data-operation-email="${esc(thread.latest.id)}">${esc(thread.latest.subject)}</button>${thread.messages.map(attachmentButtons).join('')}</div>`).join('')||'<p>No conversations linked.</p>'}
+  <h3>Recent activity</h3>${tasks.flatMap(t=>t.activity.map(item=>({...item,title:t.title}))).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20).map(item=>`<p class="muted">${esc(item.title)} · ${esc(item.text)} · ${esc(fmt(item.date))}</p>`).join('')||'<p>No activity yet.</p>'}`,
+  '<button id="operation-edit">Edit operation</button><button id="operation-all">View task list</button><button id="operation-task" class="primary">Add task</button>');
+ const showWork=()=>{page='workspace';operationFilter=id;team='All teams';owner='All owners';scope='All tasks';view='List';query=customerFilter=statusFilter=priorityFilter=typeFilter=dueFilter=workQueue='';ftzOnly=attention=false;$('#detail').close();render();};
+ $('#operation-edit').onclick=()=>shipmentEditor(id);
+ $('#add-operation-document').onclick=()=>documentEditor(operation);
+ document.querySelectorAll('[data-edit-document]').forEach(button=>button.onclick=()=>documentEditor(operation,button.dataset.editDocument));
+ $('#operation-all').onclick=showWork;
+ $('#operation-task').onclick=()=>{showWork();focusComposer();};
+ document.querySelectorAll('[data-operation-task]').forEach(button=>button.onclick=()=>taskDetail(button.dataset.operationTask));
+ document.querySelectorAll('[data-operation-email]').forEach(button=>button.onclick=()=>openInboxMessage(button.dataset.operationEmail));
+ bindAttachments();
+}
+function openInboxMessage(id){
+ const thread=conversations().find(item=>item.messages.some(message=>message.id===id));
+ if(!thread)return;
+ selectedEmail=id;captureEmailId='';mailActionDraft=null;mailQuery='';
+ inboxFilter=thread.latest.deletedAt?'Trash':personalState('inbox-view')[thread.key]?.latestId===thread.latest.id?'Archived':'Inbox';
+ $('#detail').close();page='inbox';render();
+}
+function safeDocumentURL(value){
+ try{return new URL(value).protocol==='https:';}catch{return false;}
+}
+function documentEditor(operation,id){
+ const documentLink=(operation.documents||[]).find(item=>item.id===id);
+ openDialog(documentLink?'Edit document link':'Link document',`<label class="field">Name<input id="document-name" maxlength="120" value="${esc(documentLink?.name)}"></label><label class="field">HTTPS link<input id="document-url" type="url" value="${esc(documentLink?.url)}"></label>`,
+ `${documentLink?'<button class="danger" id="delete-document">Remove link</button>':''}<button id="save-document" class="primary">Save link</button>`);
+ const done=()=>{save();render();operationDetail(operation.id);};
+ $('#save-document').onclick=()=>{
+  const name=$('#document-name').value.trim(),url=$('#document-url').value.trim();
+  if(!name||!safeDocumentURL(url))return toast('Enter a document name and an HTTPS link.');
+  operation.documents??=[];
+  if(documentLink)Object.assign(documentLink,{name,url});else operation.documents.push({id:uid(),name,url});
+  done();
+ };
+ $('#delete-document')?.addEventListener('click',()=>{operation.documents=operation.documents.filter(item=>item.id!==id);done();});
+}
+function attachmentButtons(message){
+ return (message.attachments||[]).map((file,index)=>`<button data-attachment="${esc(message.id)}" data-attachment-index="${index}">${esc(file.name)} ↓</button>`).join('');
+}
+function bindAttachments(){
+ document.querySelectorAll('[data-attachment]').forEach(button=>button.onclick=async()=>{
+  const email=state.emails.find(item=>item.id===button.dataset.attachment);
+  button.disabled=true;
+  try{
+   const {data,name}=await mailAction('attachment',{connection:email.connectionId,email:email.id,index:+button.dataset.attachmentIndex});
+   const bytes=Uint8Array.from(atob(data.replaceAll('-','+').replaceAll('_','/')),char=>char.charCodeAt(0));
+   download(name,bytes,'application/octet-stream');
+  }catch(error){toast(error.message);}finally{button.disabled=false;}
+ });
+}
+function rowDates(button){
+ const task=state.tasks.find(t=>t.id===button.dataset.rowDates);
+ const labels={due:'Requested by',cutoff:'Hard cutoff',followUp:'Follow-up reminder'};
+ const fields=button.dataset.dateKind==='deadline'?['cutoff']:['followUp'];
+ const requested=button.dataset.dateKind==='deadline'?`<label class="field">Requested date<input id="requested-date" type="date" value="${esc(task.due?.slice(0,10))}"></label><label class="field">Requested time (optional)<input id="requested-time" type="time" value="${esc(task.due?.slice(11,16))}"></label>`:'';
+ openDialog(esc(task.title),`<div class="task-properties">${requested}${fields.map(key=>`<label class="field">${labels[key]}<input data-date-property="${key}" type="datetime-local" value="${esc(task[key])}"></label>`).join('')}</div>`,'<button class="primary" id="save-row-dates">Save dates</button>');
+ $('#save-row-dates').onclick=()=>{
+  if(requested){
+   const date=$('#requested-date').value,time=$('#requested-time').value;
+   const next=date&&time?date+'T'+time:date;
+   if(next!==(task.due||'')){task.due=next;activity(task,'Updated requested deadline');}
+  }
+  for(const input of document.querySelectorAll('[data-date-property]')){
+   const key=input.dataset.dateProperty;
+   if((task[key]||'')===input.value)continue;
+   task[key]=input.value;activity(task,'Updated '+labels[key].toLowerCase());
+  }
+  save();$('#detail').close();render();
+ };
 }
