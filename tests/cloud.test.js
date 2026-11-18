@@ -135,7 +135,12 @@ test('email capture links the original and supports references, a reminder, and 
   assert.equal(form.elements.title.value,'Truck arrival schedule');
   form.elements.title.value='Confirm truck';
   submit(form);
-  for(const [name,value] of Object.entries({customer:'Test customer',ourReference:'OPS-7',customerReference:'PO-240'})){
+  doc.querySelector('#inline-properties .customer-picker').open=true;
+  const customer=doc.querySelector('#inline-properties [data-customer-query]');
+  customer.value='Test customer';
+  customer.dispatchEvent(new w.Event('input'));
+  doc.querySelector('#inline-properties [data-customer-matches] button').click();
+  for(const [name,value] of Object.entries({ourReference:'OPS-7',customerReference:'PO-240'})){
    doc.querySelector(`[data-property="${name}"]`).click();
    const field=doc.querySelector(`#inline-properties [name="${name}"]`);
    field.value=value;
@@ -144,7 +149,7 @@ test('email capture links the original and supports references, a reminder, and 
   doc.querySelector('[data-remind="tomorrow"]').click();
   await new Promise(resolve=>setTimeout(resolve,100));
   const task=snapshot.tasks.find(record=>record.title==='Confirm truck');
-  assert.equal(task.customer,'Test customer');
+  assert.equal(snapshot.clients.find(client=>client.id===task.clientId).name,'Test customer');
   assert.equal(task.ourReference,'OPS-7');
   assert.equal(task.customerReference,'PO-240');
   assert.equal(task.description,'');
@@ -292,5 +297,34 @@ test('transport template creates a checklist and task card reveals one inline ed
   await new Promise(resolve=>setTimeout(resolve,100));
   assert.ok(snapshot.tasks.some(item=>item.parentId===parent.id&&item.team==='Warehouse'&&item.owner==='Unassigned'));
 
+ }finally{dom.window.close();}
+});
+
+test('quick capture saves and reuses customers and Customers replaces Shipments navigation',async()=>{
+ const {dom,w,snapshot}=await app(true);
+ try{
+  const doc=w.document;
+  for(const [title,name] of [['First task','Coastal Cargo'],['Second task','coastal cargo']]){
+   const form=doc.querySelector('#inline-capture');
+   form.elements.title.value=title;
+   const picker=form.querySelector('.customer-picker');
+   picker.open=true;
+   const input=picker.querySelector('[data-customer-query]');
+   input.value=name;
+   input.dispatchEvent(new w.Event('input'));
+   picker.querySelector('[data-customer-matches] button').click();
+   form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  }
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.clients.length,1);
+  assert.ok(snapshot.tasks.every(task=>task.clientId===snapshot.clients[0].id));
+  assert.equal(doc.querySelector('[data-page="shipments"]'),null);
+  doc.querySelector('.glass-dock [data-page="customers"]').click();
+  const search=doc.querySelector('#customer-directory-search');
+  search.value='Coastal';
+  search.dispatchEvent(new w.Event('input'));
+  assert.equal(doc.querySelectorAll('[data-client-name]:not([hidden])').length,1);
+  doc.querySelector('[data-client-work]').click();
+  assert.equal(doc.querySelectorAll('[data-client-task]').length,2);
  }finally{dom.window.close();}
 });
