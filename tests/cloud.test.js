@@ -4,16 +4,17 @@ import {JSDOM} from 'jsdom';
 import {build} from 'esbuild';
 const bundle=await build({entryPoints:['app.js'],bundle:true,format:'iife',write:false});
 const source=bundle.outputFiles[0].text;
-async function app(session=false){
+async function app(session=false,fixture={}){
  const dom=new JSDOM('<div id="app"></div><dialog id="detail"></dialog><div id="toast"></div>',{url:'https://n10ai.github.io/N10-inboxy/',runScripts:'dangerously',pretendToBeVisual:true});
  const w=dom.window;w.structuredClone=structuredClone;w.Response=Response;w.Headers=Headers;w.Request=Request;w.scrollTo=()=>{};w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
  const requests=[];let revision=0;
- const snapshot={version:1,revision:0,groups:[{id:'ops',name:'Ops',description:'',members:[]}],people:[],tasks:[],shipments:[],emails:[],drafts:[]};
+ const snapshot={version:1,revision:0,groups:[{id:'ops',name:'Ops',description:'',members:[]}],people:[],tasks:[],shipments:[],emails:[],drafts:[],...fixture};
  if(session){w.localStorage.setItem('sb-hifqekelvzgquuputfzd-auth-token',JSON.stringify({access_token:'test-token',refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,user:{id:'10000000-0000-4000-8000-000000000001',email:'operator@example.invalid'}}));w.localStorage.setItem('inboxy.selectedWorkspace','20000000-0000-4000-8000-000000000001');}
  w.fetch=async(url,opts={})=>{requests.push({url:String(url),body:opts.body});let data=null;const path=new URL(url).pathname;
  if(path.endsWith('/inboxy-mail'))data={providers:{gmail:{label:'Gmail',configured:false,callback:'https://callback.invalid',clientIdSecret:'GOOGLE_MAIL_CLIENT_ID',clientSecretSecret:'GOOGLE_MAIL_CLIENT_SECRET'}},connections:[]};
  else if(path.endsWith('/workspaces'))data=[{id:'20000000-0000-4000-8000-000000000001',name:'Test Operations',revision}];
  else if(path.endsWith('/workspace_members'))data={role:'owner'};
+ else if(path.endsWith('/workspace_access'))data=[];
  else if(path.endsWith('/inboxy_load'))data={...snapshot,revision};
  else if(path.endsWith('/inboxy_save')){const body=JSON.parse(opts.body);assert.equal(body.expected_revision,revision);Object.assign(snapshot,body.snapshot);data=++revision;}
  return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});};
@@ -158,4 +159,42 @@ test('email capture links the original and supports references, a reminder, and 
   assert.ok(snapshot.tasks.some(record=>record.parentId===task.id && record.title==='Confirm dock appointment'));
   assert.equal(snapshot.tasks.find(record=>record.id===task.id).notes[0].body,'Carrier confirmed the appointment.');
  } finally {dom.window.close();}
+});
+
+test('threaded replies reopen the operational loop in Today and can be reviewed',async()=>{
+ const task={id:'task-1',title:'Confirm admission tally',team:'Ops',owner:'Unassigned',status:'Waiting',priority:'Normal',waitingOn:'Carrier tally',due:'',followUp:'',dependencies:[],notes:[],activity:[{text:'Task created',date:'2020-01-01T09:00:00Z'}]};
+ const emails=[
+  {id:'email-1',taskId:task.id,threadId:'thread',connectionId:'mailbox',date:'2020-01-01T08:00:00Z',from:'Sender <sender@example.invalid>',subject:'Pre-alert',body:'Original message'},
+  {id:'email-2',taskId:null,threadId:'thread',connectionId:'mailbox',date:'2020-01-02T08:00:00Z',from:'Sender <sender@example.invalid>',subject:'Re: Pre-alert',body:'Revised tally'},
+ ];
+ const {dom,w}=await app(true,{tasks:[task],emails});
+ try{
+  const doc=w.document;
+  doc.querySelector('[data-page="inbox"]').click();
+  assert.equal(doc.querySelectorAll('.mail-row').length,1);
+  assert.equal(doc.querySelectorAll('.mail-message').length,2);
+  assert.ok(doc.querySelector('#open-linked'));
+  doc.querySelector('[data-page="today"]').click();
+  assert.match(doc.querySelector('.today-grid section').textContent,/Confirm admission tally/);
+  doc.querySelector('.today-row').click();
+  doc.querySelector('#mark-mail-reviewed').click();
+  assert.match(doc.querySelector('.today-grid section').textContent,/Nothing in this queue/);
+ }finally{dom.window.close();}
+});
+
+test('workspace access can add the same teammate to the assignment list',async()=>{
+ const {dom,w,snapshot,requests}=await app(true);
+ try{
+  const doc=w.document;
+  doc.querySelector('[data-page="groups"]').click();
+  doc.querySelector('#team-access').click();
+  await new Promise(resolve=>setTimeout(resolve,50));
+  const form=doc.querySelector('#access-form');
+  form.elements.email.value='Dispatch@Example.invalid';
+  form.elements.name.value='Dispatch teammate';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.ok(requests.some(r=>r.url.endsWith('/rpc/inboxy_grant_access')&&JSON.parse(r.body).e==='dispatch@example.invalid'));
+  assert.equal(snapshot.people[0].name,'Dispatch teammate');
+ }finally{dom.window.close();}
 });
