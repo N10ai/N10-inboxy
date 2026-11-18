@@ -103,3 +103,45 @@ test('custom FTZ steps are used for new tasks and follow-up queue isolates activ
   assert.deepEqual([...doc.querySelectorAll('#task-results [data-task]')].map(row=>row.dataset.task),[parent.id]);
  } finally {dom.window.close();}
 });
+
+test('email capture links the original and supports references, a reminder, and inline updates',async()=>{
+ const {dom,w,snapshot}=await app(true);
+ try {
+  const doc=w.document;
+  const submit=form=>form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  doc.querySelector('[data-page="inbox"]').click();
+  doc.querySelector('#capture').click();
+  const emailForm=doc.querySelector('#email-form');
+  emailForm.elements.from.value='dispatch@example.invalid';
+  emailForm.elements.subject.value='Truck arrival schedule';
+  emailForm.elements.body.value='Original carrier message.';
+  submit(emailForm);
+  doc.querySelector('#email-task').click();
+  const form=doc.querySelector('#quick-task-form');
+  assert.equal(form.elements.title.value,'Truck arrival schedule');
+  form.elements.title.value='Confirm truck';
+  form.elements.customer.value='Test customer';
+  form.elements.ourReference.value='OPS-7';
+  form.elements.customerReference.value='PO-240';
+  form.querySelector('[data-remind="tomorrow"]').click();
+  assert.match(form.elements.followUp.value,/T09:00$/);
+  submit(form);
+  await new Promise(resolve=>setTimeout(resolve,100));
+  const task=snapshot.tasks.find(record=>record.title==='Confirm truck');
+  assert.equal(task.customer,'Test customer');
+  assert.equal(task.ourReference,'OPS-7');
+  assert.equal(task.customerReference,'PO-240');
+  assert.equal(task.description,'');
+  assert.equal(snapshot.emails[0].taskId,task.id);
+  doc.querySelector('#open-linked').click();
+  const subtask=doc.querySelector('#inline-subtask');
+  subtask.elements.title.value='Confirm dock appointment';
+  submit(subtask);
+  const note=doc.querySelector('#note-form');
+  note.elements.note.value='Carrier confirmed the appointment.';
+  submit(note);
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.ok(snapshot.tasks.some(record=>record.parentId===task.id && record.title==='Confirm dock appointment'));
+  assert.equal(snapshot.tasks.find(record=>record.id===task.id).notes[0].body,'Carrier confirmed the appointment.');
+ } finally {dom.window.close();}
+});
