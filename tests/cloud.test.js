@@ -20,7 +20,7 @@ async function app(session=false){
  w.eval(source);await new Promise(r=>setTimeout(r,100));return {dom,w,requests,snapshot};
 }
 test('signed-out users see auth and can explore the local demo',async()=>{const {dom,w}=await app();try{assert.match(w.document.querySelector('h1').textContent,/Every handoff/);assert.ok(w.document.querySelector('#auth-form'));w.document.querySelector('#demo-mode').click();assert.equal(w.document.querySelector('h1').textContent,'Operations inbox');assert.equal(w.document.querySelector('#account-access').textContent,'Sign in');}finally{dom.window.close();}});
-test('signed-in workspace loads without sample tasks and saves a quick task',async()=>{const {dom,w,requests,snapshot}=await app(true);try{assert.equal(w.document.querySelector('h1').textContent,'Operations inbox');assert.match(w.document.querySelector('.workspace').textContent,/Test Operations/);assert.equal(snapshot.tasks.length,0);w.document.querySelector('#new-task').click();const form=w.document.querySelector('#quick-task-form');form.elements.title.value='Wrap pallet 3';form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,100));assert.equal(snapshot.tasks[0].title,'Wrap pallet 3');assert.ok(requests.some(r=>r.url.endsWith('/rpc/inboxy_save')));assert.equal(w.localStorage.getItem('inboxy.workspace.v1'),null);}finally{dom.window.close();}});
+test('signed-in workspace loads without sample tasks and saves a quick task',async()=>{const {dom,w,requests,snapshot}=await app(true);try{assert.equal(w.document.querySelector('h1').textContent,'Operations inbox');assert.match(w.document.querySelector('.workspace').textContent,/Test Operations/);assert.equal(snapshot.tasks.length,0);w.document.querySelector('#new-task').click();const form=w.document.querySelector('#inline-capture');assert.equal(w.document.querySelector('#detail').open,false);assert.equal(w.document.activeElement,form.elements.title);form.elements.title.value='Wrap pallet 3';form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,100));assert.equal(snapshot.tasks[0].title,'Wrap pallet 3');assert.ok(requests.some(r=>r.url.endsWith('/rpc/inboxy_save')));assert.equal(w.localStorage.getItem('inboxy.workspace.v1'),null);}finally{dom.window.close();}});
 
 test('group editor customizes color and icon, and empty-group deletion works in the UI',async()=>{const {dom,w}=await app();try{w.document.querySelector('#demo-mode').click();w.document.querySelector('[data-page="groups"]').click();w.document.querySelector('#new-group').click();const form=w.document.querySelector('#group-form');form.elements.name.value='Dispatch';form.elements.color.value='#225588';form.elements.icon.value='◈';form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));const saved=JSON.parse(w.localStorage.getItem('inboxy.workspace.v1'));const group=saved.groups.find(g=>g.name==='Dispatch');assert.equal(group.color,'#225588');assert.equal(group.icon,'◈');w.document.querySelector(`[data-edit-group="${group.id}"]`).click();w.document.querySelector('#delete-group').click();w.document.querySelector('#delete-group-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert.equal(JSON.parse(w.localStorage.getItem('inboxy.workspace.v1')).groups.some(g=>g.id===group.id),false);}finally{dom.window.close();}});
 test('email connections show missing setup and an actionable setup guide',async()=>{const {dom,w}=await app(true);try{w.document.querySelector('[data-page="settings"]').click();await new Promise(r=>setTimeout(r,100));assert.match(w.document.querySelector('#mail-integrations').textContent,/Provider setup needed/);assert.equal(w.document.querySelector('[data-mail-connect]').disabled,true);w.document.querySelector('[data-mail-setup]').click();assert.match(w.document.querySelector('#detail').textContent,/GOOGLE_MAIL_CLIENT_SECRET/);}finally{dom.window.close();}});
@@ -29,7 +29,7 @@ test('pickup workflow creates selected subtasks and checks them off from the par
  const {dom,w,snapshot}=await app(true);
  try {
   w.document.querySelector('#new-task').click();
-  const form=w.document.querySelector('#quick-task-form');
+  const form=w.document.querySelector('#inline-capture');
   form.elements.title.value='Pickup for ABC Imports';
   form.elements.workflow.value='Pickup';
   form.elements.workflow.dispatchEvent(new w.Event('change'));
@@ -51,19 +51,25 @@ test('FTZ filter includes admissions and their steps, and the reference is searc
  const {dom,w,snapshot}=await app(true);
  try {
   const doc=w.document;
-  const create=(title,workflow='',reference='')=>{
+  const create=(title,workflow='')=>{
    doc.querySelector('#new-task').click();
-   const form=doc.querySelector('#quick-task-form');
+   const form=doc.querySelector('#inline-capture');
    form.elements.title.value=title;
    form.elements.workflow.value=workflow;
    form.elements.workflow.dispatchEvent(new w.Event('change'));
-   form.elements.ftzReference.value=reference;
+
    form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
   };
   create('Schedule ordinary delivery');
-  create('Admit inbound cargo','FTZ · Admission (214)','214-TEST-001');
+  create('Admit inbound cargo','FTZ · Admission (214)');
   await new Promise(resolve=>setTimeout(resolve,100));
-  const admission=snapshot.tasks.find(task=>task.ftzReference==='214-TEST-001');
+  const admission=snapshot.tasks.find(task=>task.title==='Admit inbound cargo');
+  doc.querySelector(`[data-task="${admission.id}"] .card-open`).click();
+  doc.querySelector('[data-property="ftzReference"]').click();
+  const reference=doc.querySelector('#inline-properties [name="ftzReference"]');
+  reference.value='214-TEST-001';
+  reference.dispatchEvent(new w.Event('change'));
+  doc.querySelector('[data-close]').click();
   assert.equal(admission.workflow,'FTZ · Admission (214)');
   assert.equal(snapshot.tasks.filter(task=>task.parentId===admission.id).length,5);
   doc.querySelector('#ftz-filter').click();
@@ -86,17 +92,23 @@ test('custom FTZ steps are used for new tasks and follow-up queue isolates activ
   submit(editor);
   doc.querySelector('[data-close]').click();
   doc.querySelector('#new-task').click();
-  const task=doc.querySelector('#quick-task-form');
+  const task=doc.querySelector('#inline-capture');
   task.elements.title.value='Follow up on admission';
   task.elements.workflow.value='FTZ · Admission (214)';
   task.elements.workflow.dispatchEvent(new w.Event('change'));
-  task.elements.followUp.value='2020-01-01T09:00';
+
   submit(task);
   await new Promise(resolve=>setTimeout(resolve,100));
   const parent=snapshot.tasks.find(record=>record.title==='Follow up on admission');
   assert.deepEqual(snapshot.tasks.filter(record=>record.parentId===parent.id).map(step=>[step.stepOrder,step.title]),[
    [0,'Check carrier tally'],[1,'Confirm warehouse receipt'],
   ]);
+  doc.querySelector(`[data-task="${parent.id}"] .card-open`).click();
+  doc.querySelector('#custom-reminder').click();
+  const time=doc.querySelector('#inline-properties [name="followUp"]');
+  time.value='2020-01-01T09:00';
+  time.dispatchEvent(new w.Event('change'));
+  doc.querySelector('[data-close]').click();
   const queue=doc.querySelector('#work-queue');
   queue.value='Follow-up due';
   queue.dispatchEvent(new w.Event('change'));
@@ -117,15 +129,17 @@ test('email capture links the original and supports references, a reminder, and 
   emailForm.elements.body.value='Original carrier message.';
   submit(emailForm);
   doc.querySelector('#email-task').click();
-  const form=doc.querySelector('#quick-task-form');
+  const form=doc.querySelector('#inline-capture');
   assert.equal(form.elements.title.value,'Truck arrival schedule');
   form.elements.title.value='Confirm truck';
-  form.elements.customer.value='Test customer';
-  form.elements.ourReference.value='OPS-7';
-  form.elements.customerReference.value='PO-240';
-  form.querySelector('[data-remind="tomorrow"]').click();
-  assert.match(form.elements.followUp.value,/T09:00$/);
   submit(form);
+  for(const [name,value] of Object.entries({customer:'Test customer',ourReference:'OPS-7',customerReference:'PO-240'})){
+   doc.querySelector(`[data-property="${name}"]`).click();
+   const field=doc.querySelector(`#inline-properties [name="${name}"]`);
+   field.value=value;
+   field.dispatchEvent(new w.Event('change'));
+  }
+  doc.querySelector('[data-remind="tomorrow"]').click();
   await new Promise(resolve=>setTimeout(resolve,100));
   const task=snapshot.tasks.find(record=>record.title==='Confirm truck');
   assert.equal(task.customer,'Test customer');
@@ -133,7 +147,7 @@ test('email capture links the original and supports references, a reminder, and 
   assert.equal(task.customerReference,'PO-240');
   assert.equal(task.description,'');
   assert.equal(snapshot.emails[0].taskId,task.id);
-  doc.querySelector('#open-linked').click();
+  assert.match(task.followUp,/T09:00$/);
   const subtask=doc.querySelector('#inline-subtask');
   subtask.elements.title.value='Confirm dock appointment';
   submit(subtask);
