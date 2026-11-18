@@ -787,3 +787,30 @@ button { border-color: #fff7; }
 #detail:has(.task-summary) .dialog-head,#detail:has(.task-summary) .dialog-body{padding-block:1rem}
 #detail:has(.task-summary) .dialog-footer{position:sticky;bottom:0;background:inherit}
 .task-checklist .section-title{margin-top:.25rem}
+
+.workspace-filters{margin:0 0 .8rem}
+.workspace-filters>summary{display:inline-flex;align-items:center;gap:.4rem;list-style:none;cursor:pointer;border:1px solid var(--border);border-radius:.7rem;padding:.6rem .75rem;background:var(--paper,#fff)}
+.workspace-filters>summary::-webkit-details-marker{display:none}
+.workspace-filters[open]>summary{margin-bottom:.65rem}
+.workspace-filters select,.workspace-filters input{min-width:7rem;max-width:100%}
+.task-value>button[hidden],.operation-card button[hidden]{display:none}
+.board-inline-editor{width:100%;min-width:0;max-width:100%;font-size:16px;padding:.45rem;border:1px solid var(--border);border-radius:.5rem}
+.task-checklist .section-title{display:block}
+.step-handoff{margin:.5rem 0;font-size:.85rem}
+.step-handoff summary{cursor:pointer}
+.checklist-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.5rem;align-items:center;border-bottom:1px solid var(--border);padding:.35rem 0}
+.checklist-item>button{min-width:40px;min-height:40px;padding:.3rem}
+.checklist-item>span{overflow-wrap:anywhere}
+.operator-inbox.mail-index,.operator-inbox.mail-reader{display:block;min-height:0}
+.operator-inbox .mail-list{max-height:none;overflow:visible;border:0}
+.operator-inbox .mail-select-row{grid-template-columns:auto minmax(0,1fr);gap:.3rem}
+.operator-inbox .mail-select-row:has(input[hidden]){grid-template-columns:minmax(0,1fr)}
+.operator-inbox .mail-row{padding:.65rem .85rem}
+.operator-inbox .mail-row small{display:flex;justify-content:space-between;gap:.5rem;margin-bottom:.3rem}
+.operator-inbox .mail-row time{white-space:nowrap}
+.operator-inbox .mail-row strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin:0}
+#mail-folder{padding:.5rem .65rem;border-radius:.65rem;border:1px solid var(--border);background:#fff;color:inherit}
+#mail-back{margin-bottom:.65rem}
+.mail-more summary{cursor:pointer;padding:.6rem}
+.mail-more[open]{flex-basis:100%}
+.mail-reader .mail-body{padding:clamp(.8rem,4vw,1.5rem);overflow-wrap:anywhere}
