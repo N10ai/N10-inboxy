@@ -533,20 +533,22 @@ test('desktop-style selection archives without entering selection mode and task 
  }finally{dom.window.close();}
 });
 
-test('desktop quick actions and compact task editor open the intended controls',async()=>{
+test('task capture has one entry point and keeps optional fields collapsed',async()=>{
  const {dom,w}=await app(true);
  try{
   const doc=w.document;
-  doc.querySelector('#quick-search').click();
-  assert.equal(doc.activeElement,doc.querySelector('#search'));
-  doc.querySelector('#quick-capture-email').click();
-  assert.ok(doc.querySelector('#email-form'));
-  doc.querySelector('[data-close]').click();
-  doc.querySelector('#quick-add').click();
+  assert.equal(doc.querySelectorAll('[data-add-status],[data-quick-status],#quick-add,#dock-add').length,0);
+  assert.equal(doc.querySelector('#inline-capture').hidden,true);
+  doc.querySelector('#new-task').click();
   const form=doc.querySelector('#inline-capture');
+  assert.equal(form.hidden,false);
+  assert.equal(form.querySelector('.capture-extras').open,false);
+  assert.equal(doc.querySelector('#new-task'),null);
   assert.equal(doc.activeElement,form.elements.title);
   form.elements.title.value='PU 200';
   form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  assert.equal(doc.querySelector('#inline-capture').hidden,true);
+  assert.equal(doc.activeElement.id,'new-task');
   doc.querySelector('.card-open').click();
   assert.ok(doc.querySelector('.task-tools'));
   assert.equal(doc.querySelector('#checklist-add-editor').hidden,true);
