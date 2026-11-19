@@ -1348,3 +1348,11 @@ body::before { background: none; }
 #cutoff-impacts ul { padding-inline-start:1.25rem;line-height:1.6 }
 
 #detail .dialog-footer:has(#keep-current-cutoff) { flex-wrap:wrap }
+
+.task-wait-summary{
+ display:grid;gap:.35rem;margin:.65rem 0;padding:.7rem;border:1px solid var(--glass-edge);
+ border-radius:12px;background:var(--glass-panel)
+}
+.task-wait-summary small{color:var(--control-muted)}
+.task-wait-summary .actions{margin-top:.25rem}
+#waiting-form>p{margin:0}

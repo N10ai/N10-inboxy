@@ -175,12 +175,12 @@ test('email capture links the original and supports references, a reminder, and 
 });
 
 test('threaded replies reopen the operational loop in Today and can be reviewed',async()=>{
- const task={id:'task-1',title:'Confirm admission tally',team:'Ops',owner:'Unassigned',status:'Waiting',priority:'Normal',waitingOn:'Carrier tally',due:'',followUp:'',dependencies:[],notes:[],activity:[{text:'Task created',date:'2020-01-01T09:00:00Z'}]};
+ const task={id:'task-1',title:'Confirm admission tally',team:'Ops',owner:'Unassigned',status:'Waiting',priority:'Normal',waitingOn:'Carrier tally',waitingFor:'Confirm the tally',waitingSince:'2020-01-01T09:00:00Z',waitingThreadKey:'mailbox:thread',due:'',followUp:'2020-01-02T14:00',dependencies:[],notes:[],activity:[{text:'Task created',date:'2020-01-01T09:00:00Z'}]};
  const emails=[
   {id:'email-1',taskId:task.id,threadId:'thread',connectionId:'mailbox',date:'2020-01-01T08:00:00Z',from:'Sender <sender@example.invalid>',subject:'Pre-alert',body:'Original message'},
   {id:'email-2',taskId:null,threadId:'thread',connectionId:'mailbox',date:'2020-01-02T08:00:00Z',from:'Sender <sender@example.invalid>',subject:'Re: Pre-alert',body:'Revised tally'},
  ];
- const {dom,w}=await app(true,{tasks:[task],emails});
+ const {dom,w,snapshot}=await app(true,{tasks:[task],emails});
  try{
   const doc=w.document;
   doc.querySelector('[data-page="inbox"]').click();
@@ -193,6 +193,7 @@ test('threaded replies reopen the operational loop in Today and can be reviewed'
   assert.ok(doc.querySelector('#open-linked'));
   doc.querySelector('[data-page="today"]').click();
   assert.match(doc.querySelector('.today-grid section').textContent,/Confirm admission tally/);
+  assert.equal(doc.querySelectorAll('.today-grid [data-task]').length,1);
   doc.querySelector('.today-row').click();
   doc.querySelector('#review-task-reply').click();
   assert.equal(doc.querySelector('.task-thread').open,true);
@@ -200,6 +201,9 @@ test('threaded replies reopen the operational loop in Today and can be reviewed'
   doc.querySelector('#mark-mail-reviewed').click();
   assert.equal(doc.querySelector('#review-task-reply'),null);
   assert.match(doc.querySelector('.today-grid section').textContent,/Nothing in this queue/);
+  assert.ok(doc.querySelector('.today-grid [data-draft-follow-up]'));
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks[0].status,'Waiting');
  }finally{dom.window.close();}
 });
 
@@ -597,5 +601,39 @@ test('a cutoff with several matching tasks and an ambiguous time requires manual
   assert.equal(snapshot.tasks[1].cutoff,base.cutoff);
   assert.equal(snapshot.tasks[1].activity[0].emailId,mail.id);
   assert.equal(doc.querySelector('[data-review-cutoff]'),null);
+ }finally{dom.window.close();}
+});
+
+test('a waiting task keeps its owner and can draft a due follow-up in the linked conversation',async()=>{
+ const task={id:'delivery',title:'Arrange delivery',team:'Ops',owner:'Ignacio',status:'In progress',priority:'Normal',dependencies:[],notes:[],activity:[]};
+ const mail={id:'request',taskId:task.id,connectionId:'mailbox',threadId:'release',subject:'Release request',from:'Broker <broker@example.invalid>',body:'We are checking release.',date:'2020-01-01T09:00:00Z'};
+ const {dom,w,requests,snapshot}=await app(true,{tasks:[task],emails:[mail]});
+ try{
+  const doc=w.document;
+  doc.querySelector('.card-open').click();
+  doc.querySelector('[data-edit-wait]').click();
+  const form=doc.querySelector('#waiting-form');
+  form.elements.contact.value='Broker';
+  form.elements.request.value='cargo release';
+  form.elements.followUp.value='2020-01-02T14:00';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks[0].owner,'Ignacio');
+  assert.equal(snapshot.tasks[0].status,'Waiting');
+  doc.querySelector('[data-close]').click();
+  doc.querySelector('[data-page="today"]').click();
+  const followUps=[...doc.querySelectorAll('.today-grid section')].find(s=>s.querySelector('h2').textContent.startsWith('Follow up'));
+  assert.match(followUps.textContent,/Ignacio.*Broker.*cargo release/);
+  followUps.querySelector('[data-draft-follow-up]').click();
+  const reply=doc.querySelector('#connected-reply');
+  assert.equal(reply.elements.to.value,'broker@example.invalid');
+  assert.match(reply.elements.body.value,/Following up on cargo release/);
+  assert.equal(requests.some(r=>r.body?.includes('"action":"reply"')),false);
+  doc.querySelector('[data-close]').click();
+  followUps.querySelector('[data-task]').click();
+  doc.querySelector('#resume-wait').click();
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks[0].status,'In progress');
+  assert.equal(snapshot.tasks[0].followUp,'');
  }finally{dom.window.close();}
 });

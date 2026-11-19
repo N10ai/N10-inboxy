@@ -72,6 +72,9 @@ export function moveTask(tasks, id, status, beforeId=null) {
  const column=tasks.filter(t=>t.id!==id&&t.status===status).sort((a,b)=>(a.boardOrder??tasks.indexOf(a))-(b.boardOrder??tasks.indexOf(b)));
  const index=beforeId?column.findIndex(t=>t.id===beforeId):-1;
  column.splice(index<0?column.length:index,0,task);
+ if(task.status==='Waiting'&&status!=='Waiting'&&task.waitingSince){
+  task.waitingOn=task.waitingFor=task.waitingThreadKey=task.waitingSince=task.followUp='';
+ }
  task.status=status;
  column.forEach((t,i)=>t.boardOrder=i);
  return '';
