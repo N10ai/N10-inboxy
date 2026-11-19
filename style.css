@@ -1347,3 +1347,16 @@ body::before { background: none; }
  .capture-submit-group button { padding-inline:.5rem }
  #app .glass-dock>button { flex:1 }
 }
+
+#app .task-email-subject,#detail .task-email-subject {
+ display:flex;align-items:center;gap:.35rem;max-width:100%;min-width:0;
+ margin:.18rem 0;padding:.18rem 0;min-height:24px;border:0;background:transparent;
+ color:var(--control-muted);text-align:left;font-size:.78rem;font-weight:550;line-height:1.25
+}
+#app .task-email-subject:hover,#detail .task-email-subject:hover { color:var(--control-ink);text-decoration:underline }
+.task-email-subject .control-icon { width:.9rem;height:.9rem }
+.task-email-subject span { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap }
+.task-row-customer { display:block;color:var(--control-muted);margin-top:.15rem }
+@media (pointer:coarse) {
+ #app .task-email-subject,#detail .task-email-subject { min-height:34px }
+}
