@@ -217,7 +217,15 @@ function nextChecklistStep(task,steps=checklist(task.id)){
 function nextAction(task){
  return task.nextAction || nextChecklistStep(task)?.title;
 }
-function card(t,{draggable=true}={}){const parent=handoffParent(t),blocks=blockedBy(t,state.tasks),children=state.tasks.filter(x=>x.parentId===t.id),emails=conversations().filter(thread=>thread.taskIds.includes(t.id));return `<article class="card operation-card priority-${t.priority.toLowerCase()} ${blocks.length?'has-blockers':''} ${t.status==='Completed'?'is-complete':''}" draggable="${draggable}" tabindex="0" role="group" data-task="${t.id}" aria-label="${esc(taskHeading(t))}"><div class="card-context"><span class="ref">${esc(taskReferences(t).find(ref=>ref!==taskHeading(t))||t.workflow||'GENERAL REQUEST')}</span>${draggable?`<button class="drag-handle" data-drag="${t.id}" aria-label="Drag ${esc(taskHeading(t))}" title="Drag to move or reorder" draggable="false">${controlIcon('grip')}</button>`:''}</div><button class="card-open"><h3>${esc(taskHeading(t))}</h3></button><div class="customer">${taskCustomer(t)?esc(taskCustomer(t))+' · ':''}<button class="group-chip" data-quick-edit="${esc(t.id)}" data-field="team">${esc(t.team)}</button>${parent?' · Handoff':''}</div>${parent?`<p class="handoff-work">${esc(t.title)}</p>`:t.description?`<p class="handoff-work board-description">${esc(t.description)}</p>`:''}<button class="next-action" data-field="nextAction" data-quick-edit="${t.id}"><span>NEXT</span><strong>${esc(nextAction(t)||'Add next action')}</strong><span>${controlIcon('arrow')}</span></button>${blocks.length?`<div class="blocked-line">${controlIcon('branch')} Waiting on ${esc(blocks[0].title)}${blocks.length>1?' +'+(blocks.length-1):''}</div>`:''}<div class="card-signals"><span class="badge ${t.priority}">${esc(t.priority)}${t.priorityOverride?' · Manual':''}</span>${deadline(t)&&dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'<span class="overdue-pill">Overdue</span>':''}${children.length?`<span>${controlIcon('checklist')} ${children.filter(c=>c.status==='Completed').length}/${children.length}</span>`:''}${emails.length?`<button data-card-email="${t.id}">${controlIcon('mail')} ${emails.length}</button>`:''}${t.followUp?`<span title="Follow-up">${controlIcon('timer')} ${esc(fmt(t.followUp))}</span>`:''}</div><div class="card-bottom"><button class="card-owner" data-field="owner" data-quick-edit="${t.id}"><span class="avatar">${esc(initials(t.owner))}</span>${esc(t.owner)}</button><button class="card-due ${dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'overdue':''}" data-field="${t.cutoff?'cutoff':'due'}" data-quick-edit="${t.id}">${t.cutoff?'Cutoff · '+esc(fmt(t.cutoff)):t.due?esc(fmt(t.due)):'＋ Due date'}</button></div><label class="card-move"><span>Move to</span><select data-move="${t.id}" aria-label="Move ${esc(taskHeading(t))} to status">${options(STATUSES,t.status)}</select></label></article>`;}
+function linkedEmailSubject(task,threads){
+ const email=threads.find(thread=>thread.taskIds.includes(task.id)&&!thread.latest.deletedAt)?.latest;
+ if(!email)return '';
+ const subject=email.subject||'(No subject)';
+ return `<button type="button" class="task-email-subject" data-task-email="${esc(email.id)}" title="${esc(subject)}">
+  ${controlIcon('mail')}<span>${esc(subject)}</span>
+ </button>`;
+}
+function card(t,{draggable=true}={}){const parent=handoffParent(t),blocks=blockedBy(t,state.tasks),children=state.tasks.filter(x=>x.parentId===t.id),threads=conversations();return `<article class="card operation-card priority-${t.priority.toLowerCase()} ${blocks.length?'has-blockers':''} ${t.status==='Completed'?'is-complete':''}" draggable="${draggable}" tabindex="0" role="group" data-task="${t.id}" aria-label="${esc(taskHeading(t))}"><div class="card-context"><span class="ref">${esc(taskReferences(t).find(ref=>ref!==taskHeading(t))||t.workflow||'GENERAL REQUEST')}</span>${draggable?`<button class="drag-handle" data-drag="${t.id}" aria-label="Drag ${esc(taskHeading(t))}" title="Drag to move or reorder" draggable="false">${controlIcon('grip')}</button>`:''}</div><button class="card-open"><h3>${esc(taskHeading(t))}</h3></button>${linkedEmailSubject(t,threads)}<div class="customer">${taskCustomer(t)?esc(taskCustomer(t))+' · ':''}<button class="group-chip" data-quick-edit="${esc(t.id)}" data-field="team">${esc(t.team)}</button>${parent?' · Handoff':''}</div>${parent?`<p class="handoff-work">${esc(t.title)}</p>`:t.description?`<p class="handoff-work board-description">${esc(t.description)}</p>`:''}<button class="next-action" data-field="nextAction" data-quick-edit="${t.id}"><span>NEXT</span><strong>${esc(nextAction(t)||'Add next action')}</strong><span>${controlIcon('arrow')}</span></button>${blocks.length?`<div class="blocked-line">${controlIcon('branch')} Waiting on ${esc(blocks[0].title)}${blocks.length>1?' +'+(blocks.length-1):''}</div>`:''}<div class="card-signals"><span class="badge ${t.priority}">${esc(t.priority)}${t.priorityOverride?' · Manual':''}</span>${deadline(t)&&dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'<span class="overdue-pill">Overdue</span>':''}${children.length?`<span>${controlIcon('checklist')} ${children.filter(c=>c.status==='Completed').length}/${children.length}</span>`:''}${t.followUp?`<span title="Follow-up">${controlIcon('timer')} ${esc(fmt(t.followUp))}</span>`:''}</div><div class="card-bottom"><button class="card-owner" data-field="owner" data-quick-edit="${t.id}"><span class="avatar">${esc(initials(t.owner))}</span>${esc(t.owner)}</button><button class="card-due ${dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'overdue':''}" data-field="${t.cutoff?'cutoff':'due'}" data-quick-edit="${t.id}">${t.cutoff?'Cutoff · '+esc(fmt(t.cutoff)):t.due?esc(fmt(t.due)):'＋ Due date'}</button></div><label class="card-move"><span>Move to</span><select data-move="${t.id}" aria-label="Move ${esc(taskHeading(t))} to status">${options(STATUSES,t.status)}</select></label></article>`;}
 function groupBoard(list){
  const columns=state.groups.filter(group=>team==='All teams'||group.name===team);
  const known=new Set(columns.map(group=>group.name));
@@ -380,7 +388,7 @@ function shipmentTiming(task,steps,now=Date.now()){
 }
 function taskDetail(id,focus){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),cutoffThreads=conversations(),threads=cutoffThreads.filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks),done=children.filter(step=>step.status==='Completed').length,next=nextChecklistStep(t,children);
 const cutoffReviews=cutoffThreads.map(cutoffCase).filter(review=>review?.targets.some(task=>task===t||children.includes(task)));
-openDialog(esc(t.workflow||(t.parentId?'Checklist step':'Task')),`${cutoffReviews.map(review=>`<div class="task-reply-callout"><span>Cutoff change · ${esc(review.email.subject)}</span>${cutoffReviewButton(review)}</div>`).join('')}${pendingReply(t,threads)?`<div class="task-reply-callout">${controlIcon('mail')}<span>New email on this task</span><button id="review-task-reply">Review email</button></div>`:''}<div class="task-workspace"><div class="work-brief">${taskProperties(t,shipmentTiming(t,children),next)}
+openDialog(esc(t.workflow||(t.parentId?'Checklist step':'Task')),`${cutoffReviews.map(review=>`<div class="task-reply-callout"><span>Cutoff change · ${esc(review.email.subject)}</span>${cutoffReviewButton(review)}</div>`).join('')}${pendingReply(t,threads)?`<div class="task-reply-callout">${controlIcon('mail')}<span>New email on this task</span><button id="review-task-reply">Review email</button></div>`:''}<div class="task-workspace"><div class="work-brief">${taskProperties(t,shipmentTiming(t,children),next,threads)}
 ${t.status==='Waiting'?`<div class="task-wait-summary"><strong>Waiting on ${esc(t.waitingOn||'someone')}</strong>
  ${t.waitingFor?`<span>${esc(t.waitingFor)}</span>`:''}
  <small>${t.followUp?'Follow up '+esc(fmt(t.followUp)):'No follow-up set'}</small>
@@ -389,6 +397,7 @@ ${t.status==='Waiting'?`<div class="task-wait-summary"><strong>Waiting on ${esc(
  bindAttachments();
  bindTaskShortcuts(t,children);
  const detail=$('#detail');
+ detail.querySelector('[data-task-email]')?.addEventListener('click',event=>openInboxMessage(event.currentTarget.dataset.taskEmail));
  bindWaitingActions(detail);
  $('#resume-wait')?.addEventListener('click',()=>{
   const issue=moveTask(state.tasks,t.id,'In progress');
@@ -1036,7 +1045,7 @@ function bindComposer(email){
   toast('Task added');
  };
 }
-function taskProperties(task,timing='',step){
+function taskProperties(task,timing='',step,threads=[]){
  const field=(key,label,value,{choices,type='text',display=value,style='',limit=180}={})=>{
   const control=choices?`<select name="${key}">${choices}</select>`:type==='textarea'?
    `<textarea name="${key}" rows="3" maxlength="4000">${esc(value)}</textarea>`:
@@ -1052,6 +1061,7 @@ function taskProperties(task,timing='',step){
  return `<div id="inline-properties" class="task-summary">
   ${parent?`<h2 class="shipment-task-heading">${esc(parent.title)}</h2>`:field('title','Shipment reference / task title',task.title,{style:'task-title-value'})}
   ${parent?field('title','Work to do',task.title):''}
+  ${linkedEmailSubject(task,threads)}
   ${customerPicker(task.clientId,{label:taskCustomer(task)})}
   <p class="muted task-reference-line" ${taskReferences(task).length?'':'hidden'}>${esc([...new Set(taskReferences(task))].join(' · '))}</p>
   <div class="task-action-brief">
@@ -1118,7 +1128,7 @@ function dropTarget(x,y){const el=document.elementFromPoint(x,y);const col=el?.c
 function clearDrag(){dragId=null;dragGhost?.remove();dragGhost=null;dragStart=null;dragLast=null;cancelAnimationFrame(dragFrame);dragFrame=null;document.body.classList.remove('is-dragging');document.querySelectorAll('.drop-over,.drag-source,.drop-before,.drop-at-end').forEach(e=>e.classList.remove('drop-over','drag-source','drop-before','drop-at-end'));}
 function bindBoard(){
  document.querySelectorAll('[data-quick-edit]').forEach(button=>button.onclick=()=>editCardValue(button));
- document.querySelectorAll('[data-card-email]').forEach(b=>b.onclick=()=>taskDetail(b.dataset.cardEmail));
+ $('#app').querySelectorAll('[data-task-email]').forEach(button=>button.onclick=()=>openInboxMessage(button.dataset.taskEmail));
  document.querySelectorAll('[data-move]').forEach(s=>s.onchange=()=>applyBoardMove(s.dataset.move,s.value));
  document.querySelectorAll('.operation-card[draggable=true]').forEach(c=>{c.ondragstart=e=>{if(e.target.closest('select,input,button')){e.preventDefault();return;}dragId=c.dataset.task;e.dataTransfer.setData('text/plain',dragId);e.dataTransfer.effectAllowed='move';c.classList.add('drag-source');};c.ondragend=clearDrag;});
  document.querySelectorAll('[data-status]').forEach(col=>{col.ondragover=e=>{if(!dragId)return;e.preventDefault();e.dataTransfer.dropEffect='move';paintDrop(dropTarget(e.clientX,e.clientY));};col.ondragleave=e=>{if(!col.contains(e.relatedTarget))paintDrop(null);};col.ondrop=e=>{if(!dragId)return;e.preventDefault();const id=dragId,target=dropTarget(e.clientX,e.clientY);clearDrag();if(target)applyBoardMove(id,target.status,target.beforeId);};});
@@ -1268,15 +1278,16 @@ function groupLabel(task){
   'By shipment':shipment(task.shipmentId)?.reference||'Standalone'}[groupBy]||'';
 }
 function taskTable(list){
+ const threads=conversations();
  const done=state.tasks.filter(t=>t.status==='Completed').length;
  const counts=scope==='Team overview'?`<div class="notice">${done} completed · ${state.tasks.length-done} pending · ${state.tasks.filter(t=>t.status!=='Completed'&&blockedBy(t,state.tasks).length).length} blocked · ${state.tasks.filter(t=>t.status!=='Completed'&&workQueues.Overdue(t,Date.now())).length} overdue · ${state.tasks.filter(t=>t.status!=='Completed'&&workQueues['Due within 24h'](t,Date.now())&&!workQueues.Overdue(t,Date.now())).length} upcoming<br>${TEAMS.map(name=>esc(name)+' '+state.tasks.filter(t=>t.team===name&&t.status!=='Completed').length).join(' · ')}</div>`:'';
  const bulk=`<div class="actions selection-bar"><label><input type="checkbox" id="select-tasks" ${list.length&&list.every(t=>selectedTasks.has(t.id))?'checked':''}> Select visible</label><span>${list.filter(t=>selectedTasks.has(t.id)).length} selected</span><select id="bulk-owner" aria-label="Assign selected tasks"><option value="">Assign selected…</option>${options(USERS,'')}</select><select id="bulk-status" aria-label="Change selected status"><option value="">Move selected…</option>${options(STATUSES,'')}</select><button class="danger" id="bulk-delete">Delete selected</button></div>`;
  const groups=new Map();
  for(const task of list){const label=groupLabel(task);if(!groups.has(label))groups.set(label,[]);groups.get(label).push(task);}
- return counts+bulk+([...groups].map(([label,tasks])=>`${label?`<h3 class="task-group-label">${esc(label)} <small>${tasks.length}</small></h3>`:''}<div class="table-wrap"><table><thead><tr><th></th><th>Task / next action</th><th>Client / reference</th><th>Department / owner</th><th>Status</th><th>Deadline</th><th>Priority / follow-up</th></tr></thead><tbody>${tasks.map(t=>`<tr tabindex="0" data-task="${esc(t.id)}">
+ return counts+bulk+([...groups].map(([label,tasks])=>`${label?`<h3 class="task-group-label">${esc(label)} <small>${tasks.length}</small></h3>`:''}<div class="table-wrap"><table><thead><tr><th></th><th>Task / next action</th><th>Reference</th><th>Department / owner</th><th>Status</th><th>Deadline</th><th>Priority / follow-up</th></tr></thead><tbody>${tasks.map(t=>`<tr tabindex="0" data-task="${esc(t.id)}">
   <td><input type="checkbox" data-select-task="${esc(t.id)}" aria-label="Select ${esc(t.title)}" ${selectedTasks.has(t.id)?'checked':''}></td>
-  <td><strong>${esc(taskHeading(t))}</strong><p class="muted">${esc(handoffParent(t)?t.title:t.description||nextAction(t)||t.taskType||'')}</p></td>
-  <td>${esc(taskCustomer(t)||'—')}<br><small>${esc(taskReferences(t).join(' · '))}</small></td>
+  <td><strong>${esc(taskHeading(t))}</strong>${linkedEmailSubject(t,threads)}${taskCustomer(t)?`<small class="task-row-customer">${esc(taskCustomer(t))}</small>`:''}<p class="muted">${esc(handoffParent(t)?t.title:t.description||nextAction(t)||t.taskType||'')}</p></td>
+  <td><small>${esc(taskReferences(t).join(' · ')||'—')}</small></td>
   <td><select data-row-field="team" aria-label="Group">${options(TEAMS,t.team)}</select><select data-row-field="owner" aria-label="Owner">${options(USERS,t.owner)}</select>
    ${t.owner==='Unassigned'&&myOwner()?'<button data-claim>Claim</button>':''}</td>
   <td><select data-row-field="status" aria-label="Status">${options(STATUSES,t.status)}</select>

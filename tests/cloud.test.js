@@ -639,3 +639,25 @@ test('a waiting task keeps its owner and can draft a due follow-up in the linked
   assert.equal(snapshot.tasks[0].followUp,'');
  }finally{dom.window.close();}
 });
+
+test('linked email subject sits between the task title and customer and opens the conversation',async()=>{
+ const task={id:'pickup',title:'Book pickup',customer:'Coastal',team:'Ops',owner:'Unassigned',status:'Up next',priority:'Normal',dependencies:[],notes:[],activity:[]};
+ const email={id:'pickup-mail',taskId:task.id,subject:'Pickup instructions',from:'Dispatch <dispatch@example.invalid>',body:'Pickup at dock 3.',date:'2020-01-01T09:00:00Z'};
+ const {dom,w}=await app(true,{tasks:[task],emails:[email]});
+ try{
+  const doc=w.document;
+  const card=doc.querySelector('.operation-card');
+  const subject=card.querySelector('.task-email-subject');
+  assert.equal(subject.previousElementSibling.textContent.trim(),task.title);
+  assert.match(subject.nextElementSibling.textContent,/Coastal/);
+  assert.equal(subject.textContent.trim(),email.subject);
+  card.querySelector('.card-open').click();
+  assert.equal(doc.querySelector('#detail .task-email-subject').nextElementSibling.classList.contains('customer-picker'),true);
+  doc.querySelector('[data-close]').click();
+  doc.querySelector('[data-view="List"]').click();
+  const listSubject=doc.querySelector('tbody .task-email-subject');
+  assert.equal(listSubject.nextElementSibling.textContent,'Coastal');
+  listSubject.click();
+  assert.equal(doc.querySelector('[data-reader]').dataset.reader,email.id);
+ }finally{dom.window.close();}
+});
