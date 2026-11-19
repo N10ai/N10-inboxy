@@ -656,9 +656,6 @@ button { border-color: #fff7; }
 
 .quick-capture [hidden] { display: none; }
 .quick-capture .capture-email { margin: 0; }
-.task-reminders { gap: 6px; margin-top: 6px; }
-.task-reminders button { padding: 7px 10px; font-size: 12px; }
-.task-reminders span { font-size: 12px; }
 #inline-subtask { flex: 1 1 210px; justify-content: flex-end; }
 #inline-subtask input { min-width: 0; max-width: 240px; }
 .task-thread { margin: 18px 0; }
@@ -711,7 +708,6 @@ button { border-color: #fff7; }
 .task-property-chips [aria-expanded="true"] { background: #e8dfd4; }
 .task-property-fields .field[hidden] { display: none; }
 .task-property-fields .field, .task-next-field { margin: 10px 0; }
-.task-follow-up { margin-bottom: 18px; }
 .mail-body .inline-capture { margin-top: 12px; }
 
 .inbox-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:14px; }
@@ -774,7 +770,7 @@ button { border-color: #fff7; }
 .task-value>[data-task-field]{margin:.3rem 0 .55rem}
 .task-value>[data-task-field][hidden],.template-preview[hidden]{display:none}
 .task-value input,.task-value select,.task-value textarea{min-width:0;max-width:100%;width:100%;box-sizing:border-box}
-.task-section,.task-checklist,.task-follow-up{margin-block:.45rem}
+.task-section,.task-checklist{margin-block:.45rem}
 .task-section .task-value>button{background:transparent;border-color:transparent}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 @media(max-width:520px){
@@ -840,16 +836,8 @@ button { border-color: #fff7; }
 .operator-inbox.mail-index .mail-row small{color:#65584d}
 .operator-inbox.mail-index .mail-row small time{font-size:.72rem}
 
-.checklist-milestone{min-width:0}
-.checklist-milestone>summary{cursor:pointer;padding:.45rem 0;font-size:.88rem}
-.checklist-milestone>summary strong{font-weight:600;overflow-wrap:anywhere}
-.checklist-milestone>summary small,.milestone-dates,.milestone-note{display:block;font-size:.76rem;margin:.25rem 0 0;color:var(--muted)}
 .milestone-note{white-space:pre-wrap;overflow-wrap:anywhere}
 .milestone-dates.milestone-late{color:#a9422b;font-weight:650}
-.milestone-editor{display:grid;gap:.5rem;padding:.55rem 0 .35rem}
-.milestone-editor input,.milestone-editor textarea{min-width:0;max-width:100%;font-size:16px}
-.milestone-editor>button{justify-self:start}
-.milestone-date-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8rem),1fr));gap:.5rem}
 
 .task-summary .task-summary-pair{grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem}
 .task-assignment{display:grid;min-width:0;padding:.35rem .45rem;border:1px solid var(--border);border-radius:.6rem;background:#fff}
@@ -1017,14 +1005,10 @@ button { border-color: #fff7; }
 #detail.task-dialog .task-checklist>summary{
  list-style:none;font-weight:650;border-bottom:1px solid var(--control-line);margin-bottom:.35rem;
 }
-#detail.task-dialog .task-checklist>summary::-webkit-details-marker,.checklist-milestone>summary::-webkit-details-marker{display:none}
 #detail.task-dialog .checklist-item{grid-template-columns:36px minmax(0,1fr) auto;align-items:start;gap:.3rem;padding-block:.25rem}
 .milestone-check{display:grid;place-items:center;cursor:pointer;width:36px;height:36px}
+#detail.task-dialog .task-checklist>summary::-webkit-details-marker{display:none}
 #detail .milestone-check input{width:18px;height:18px;margin:0;cursor:pointer;accent-color:var(--control-focus)}
-#detail .checklist-milestone>summary{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:.15rem .45rem;list-style:none;min-height:36px}
-.milestone-edit-icon{grid-column:2;grid-row:1;color:var(--control-focus)}
-.checklist-milestone .milestone-note,.checklist-milestone .milestone-dates{grid-column:1 / -1}
-.checklist-item:has(input:checked) .checklist-milestone strong{color:var(--control-muted);text-decoration:line-through}
 #detail .checklist-item>button{display:inline-flex;align-items:center;gap:.25rem;min-width:33px;min-height:34px;padding-inline:.35rem}
 
 /* The task reads as a work brief. Editing stays alongside the value. */
@@ -1073,4 +1057,79 @@ button { border-color: #fff7; }
 }
 @media(max-width:600px){
  #detail.task-dialog .task-assignment select{font-size:16px;max-width:100%}
+}
+
+.task-shortcut-bar,.checklist-shortcuts,.shortcut-actions{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+.task-shortcut-bar{margin:.7rem 0 .35rem}
+#detail .task-shortcut{
+ display:inline-flex;align-items:center;justify-content:center;gap:.35rem;min-height:36px;
+ padding:.35rem .6rem;border-radius:9px;border:1px solid var(--control-line);background:#fffc;
+ font-size:.79rem;font-weight:600;color:var(--control-ink)
+}
+#detail .task-shortcut svg{width:16px;height:16px;flex:none}
+#detail .task-shortcut.has-cutoff{color:#8e3825}
+#detail .task-shortcut:hover,#detail .task-shortcut[aria-expanded="true"]{background:#f3e4d7;border-color:#b88d74}
+#detail .task-shortcut-editor{
+ display:grid;gap:.55rem;min-width:0;grid-column:2 / -1;
+ padding:.65rem;border:1px solid var(--control-line);border-radius:11px;background:#fff9
+}
+.shortcut-date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+.shortcut-date-fields label{display:grid;gap:.25rem;min-width:0;font-size:.78rem}
+#detail .task-shortcut-editor :is(input,textarea){min-width:0;width:100%;margin:0}
+#detail .task-shortcut-editor textarea{resize:vertical}
+.shortcut-actions{justify-content:flex-end}
+#detail .shortcut-actions button{font-size:.78rem;min-height:34px;padding:.35rem .6rem}
+.checklist-copy{min-width:0;padding-block:.55rem;font-size:.88rem;line-height:1.3;overflow-wrap:anywhere}
+.checklist-item:has(input:checked) .checklist-copy strong{color:var(--control-muted);text-decoration:line-through}
+.milestone-dates,.milestone-note{display:block;font-size:.76rem;margin-top:.25rem}
+.checklist-shortcuts{justify-content:flex-end}
+#detail .checklist-shortcuts button{min-width:36px;min-height:36px;padding:.3rem}
+@media(max-width:600px){
+ #detail .task-shortcut,#detail .checklist-shortcuts button{min-height:44px;min-width:44px}
+ #detail.task-dialog .checklist-item{grid-template-columns:36px minmax(0,1fr)}
+ #detail .checklist-shortcuts{grid-column:2;justify-content:flex-start}
+ #detail .task-shortcut-editor :is(input,textarea){font-size:16px}
+}
+
+#detail.task-dialog{width:min(1020px,calc(100vw - 24px));background:#faf5ef}
+#detail.task-dialog .dialog-head{background:#faf5ef}
+.task-workspace{display:grid;gap:1rem}
+.work-brief,.work-steps{min-width:0}
+#detail.task-dialog .task-title-value>button{font-size:clamp(1.6rem,3vw,2.25rem);letter-spacing:-.035em;padding-inline:0}
+.task-action-brief{
+ margin:.8rem 0 .55rem;padding:.5rem .7rem;background:#efe4d8;border-radius:13px;
+ border-left:3px solid #a66145
+}
+#detail.task-dialog .task-action-brief .task-next-value{margin:0}
+#detail.task-dialog .task-action-brief .task-next-value>button{background:none;border:0;padding-inline:.25rem;min-height:44px}
+#detail .task-action-brief .task-next-value strong{font-size:1rem}
+.task-brief-alert{display:inline-block;background:#fae1d6;color:#8e3825;border-radius:6px;padding:.18rem .45rem;font-size:.73rem;font-weight:650;margin:.15rem .25rem}
+.task-reply-callout{
+ display:flex;align-items:center;gap:.55rem;margin:0 0 .8rem;padding:.45rem .65rem;
+ border-radius:10px;background:#eaeef1;color:#314653;font-size:.85rem
+}
+.task-reply-callout>button{margin-left:auto}
+.task-reply-callout>svg{width:18px;height:18px;flex:none}
+#detail.task-dialog .task-checklist>summary{order:0}
+.milestone-rail{
+ order:1;display:flex;gap:.3rem;list-style:none;overflow-x:auto;overscroll-behavior-inline:contain;
+ padding:.2rem .2rem .55rem;margin:.15rem 0 .4rem;scroll-snap-type:x proximity
+}
+.milestone-rail li{flex:1 0 112px;min-width:0;scroll-snap-align:start}
+#detail .milestone-rail button{
+ position:relative;display:grid;align-content:start;gap:.28rem;text-align:left;width:100%;height:100%;
+ min-height:80px;padding:.5rem;font-size:.72rem;line-height:1.25;overflow-wrap:anywhere;background:#fff9;
+ border-radius:9px;color:var(--control-ink);border:1px solid var(--control-line)
+}
+#detail .milestone-rail button:hover,#detail .milestone-rail button[aria-current=step]{background:#f1e2d4;border-color:#b98a70}
+.milestone-rail small{color:var(--control-muted)}
+.milestone-indicator{width:15px;height:15px;display:grid;place-items:center;border:1px solid #a58b77;border-radius:50%}
+.milestone-indicator.is-done{background:#356a55;color:white;border-color:#356a55}
+.milestone-indicator svg{width:11px;height:11px}
+[aria-current=step] .milestone-indicator{border:4px solid #8e503a}
+#detail.task-dialog .checklist-items{order:2}
+#detail.task-dialog .checklist-add-area{order:3}
+@media(min-width:850px){
+ .task-workspace{grid-template-columns:minmax(0,2fr) minmax(0,3fr);align-items:start;gap:1.15rem}
+ .work-steps{border-left:1px solid var(--control-line);padding-left:1.15rem}
 }
