@@ -105,10 +105,14 @@ test('custom FTZ steps are used for new tasks and follow-up queue isolates activ
    [0,'Check carrier tally'],[1,'Confirm warehouse receipt'],
   ]);
   doc.querySelector(`[data-task="${parent.id}"] .card-open`).click();
-  doc.querySelector('#custom-reminder').click();
-  const time=doc.querySelector('#inline-properties [name="followUp"]');
-  time.value='2020-01-01T09:00';
-  time.dispatchEvent(new w.Event('change'));
+  let pickerCalls=0;
+  w.HTMLInputElement.prototype.showPicker=function(){if(this.type==='date')pickerCalls++;};
+  doc.querySelector('[data-task-shortcut="followUp"]').click();
+  assert.equal(pickerCalls,1);
+  const reminder=doc.querySelector('.task-shortcut-editor');
+  reminder.elements.date.value='2020-01-01';
+  reminder.elements.time.value='09:00';
+  submit(reminder);
   doc.querySelector('[data-close]').click();
   const queue=doc.querySelector('#work-queue');
   queue.value='Follow-up due';
@@ -146,6 +150,7 @@ test('email capture links the original and supports references, a reminder, and 
    field.value=value;
    field.dispatchEvent(new w.Event('change'));
   }
+  doc.querySelector('[data-task-shortcut="followUp"]').click();
   doc.querySelector('[data-remind="tomorrow"]').click();
   await new Promise(resolve=>setTimeout(resolve,100));
   const task=snapshot.tasks.find(record=>record.title==='Confirm truck');
@@ -158,7 +163,9 @@ test('email capture links the original and supports references, a reminder, and 
   const subtask=doc.querySelector('#inline-subtask');
   subtask.elements.title.value='Confirm dock appointment';
   submit(subtask);
-  const note=doc.querySelector('#note-form');
+  doc.querySelector('.task-shortcut-bar [data-task-shortcut="notes"]').click();
+  const note=doc.querySelector('.task-shortcut-editor');
+  assert.equal(doc.activeElement,note.elements.note);
   note.elements.note.value='Carrier confirmed the appointment.';
   submit(note);
   await new Promise(resolve=>setTimeout(resolve,100));
@@ -187,7 +194,11 @@ test('threaded replies reopen the operational loop in Today and can be reviewed'
   doc.querySelector('[data-page="today"]').click();
   assert.match(doc.querySelector('.today-grid section').textContent,/Confirm admission tally/);
   doc.querySelector('.today-row').click();
+  doc.querySelector('#review-task-reply').click();
+  assert.equal(doc.querySelector('.task-thread').open,true);
+  assert.match(doc.querySelector('.task-thread').textContent,/Revised tally/);
   doc.querySelector('#mark-mail-reviewed').click();
+  assert.equal(doc.querySelector('#review-task-reply'),null);
   assert.match(doc.querySelector('.today-grid section').textContent,/Nothing in this queue/);
  }finally{dom.window.close();}
 });
@@ -348,12 +359,26 @@ test('Ocean Export checklist saves independent scheduled dates, cutoffs and note
   capture.elements.workflow.dispatchEvent(new w.Event('change'));
   submit(capture);
   doc.querySelector('#task-results .card-open').click();
-  const stepForm=title=>[...doc.querySelectorAll('.checklist-milestone')].find(item=>item.querySelector('summary').textContent.includes(title)).querySelector('form');
-  const docs=stepForm('Documentation cutoff');
-  docs.elements.cutoff.value='2026-11-21T16:00';
-  docs.elements.notes.value='Send shipping instructions to carrier.';
+  const firstMilestone=doc.querySelector('.milestone-rail [aria-current="step"]');
+  assert.ok(firstMilestone);
+  firstMilestone.click();
+  assert.equal(doc.activeElement.dataset.completeChild,firstMilestone.dataset.milestoneJump);
+  doc.activeElement.click();
+  assert.equal(doc.querySelector('.milestone-rail .is-done').closest('button').dataset.milestoneJump,firstMilestone.dataset.milestoneJump);
+  assert.notEqual(doc.querySelector('.milestone-rail [aria-current="step"]').dataset.milestoneJump,firstMilestone.dataset.milestoneJump);
+  const stepForm=(title,key)=>{
+   const row=[...doc.querySelectorAll('[data-step]')].find(item=>item.querySelector('strong').textContent.includes(title));
+   row.querySelector(`[data-task-shortcut="${key}"]`).click();
+   return row.querySelector('.task-shortcut-editor');
+  };
+  const docs=stepForm('Documentation cutoff','cutoff');
+  docs.elements.date.value='2026-11-21';
+  docs.elements.time.value='16:00';
   submit(docs);
-  const loading=stepForm('Container loading');
+  const notes=stepForm('Documentation cutoff','notes');
+  notes.elements.note.value='Send shipping instructions to carrier.';
+  submit(notes);
+  const loading=stepForm('Container loading','due');
   loading.elements.date.value='2026-11-20';
   submit(loading);
   await new Promise(resolve=>setTimeout(resolve,100));

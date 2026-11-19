@@ -36,6 +36,9 @@ const controlIcons={
  today:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
  people:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2m1-14a3 3 0 0 1 0 6m2 3a4 4 0 0 1 3 4v1"/>',
  edit:'<path d="m15 5 4 4M4 20l4-.8L20 7l-3-3L5 16Z"/>',
+ timer:'<circle cx="12" cy="14" r="7"/><path d="M9 2h6m-3 5V2m5.2 6.8L19 7m-7 4v3l2 1"/>',
+ cutoff:'<path d="M5 21V4m0 1c5-4 9 4 14 0v10c-5 4-9-4-14 0"/>',
+ note:'<path d="M5 3h14v13l-5 5H5zM14 21v-5h5M8 8h8m-8 4h6"/>',
  calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/>',
  check:'<path d="m5 12 4 4L19 6"/>',
  arrow:'<path d="M7 17 17 7M7 7h10v10"/>',
@@ -254,48 +257,124 @@ function taskEditor(id){
  };
 }
 function hasDependencyPath(start,target,visited=new Set()){if(!target)return false;if(start===target)return true;if(visited.has(start))return false;visited.add(start);return state.tasks.find(t=>t.id===start)?.dependencies.some(d=>hasDependencyPath(d,target,visited))||false;}
-function checklistItem(step,openStep){
+const taskShortcuts={
+ due:{label:'Due date',icon:'calendar'},
+ cutoff:{label:'Hard cutoff',icon:'cutoff'},
+ followUp:{label:'Reminder',icon:'timer'},
+ notes:{label:'Notes',icon:'note'}
+};
+function shortcutButton(task,key,compact=false){
+ const {label,icon}=taskShortcuts[key];
+ const value=key==='notes'?(compact?(task.description?'Note':''):(task.notes.length?'· '+task.notes.length:'')):(task[key]?fmt(task[key]):'');
+ return `<button type="button" class="task-shortcut${key==='cutoff'&&task.cutoff?' has-cutoff':''}" data-task-shortcut="${key}" aria-expanded="false" aria-label="${label}${value?' · '+esc(value):''}" title="${label}">${controlIcon(icon)}${compact?'':`<span>${key==='notes'?label+' '+esc(value):label+(value?' · '+esc(value):'')}</span>`}</button>`;
+}
+function checklistItem(step){
  const late=step.status!=='Completed'&&dueTime(deadline(step))<Date.now();
- const open=step.id===openStep;
- return `<div class="checklist-item">
+ return `<div class="checklist-item" data-step="${esc(step.id)}">
   <label class="milestone-check"><input type="checkbox" data-complete-child="${esc(step.id)}" aria-label="Complete ${esc(step.title)}" ${step.status==='Completed'?'checked':''}></label>
-  <details class="checklist-milestone" ${open?'open':''}>
-   <summary><strong>${esc(step.title)}</strong><span class="milestone-edit-icon">${controlIcon('calendar')}</span>
-    ${step.due||step.cutoff?`<span class="milestone-dates ${late?'milestone-late':''}">${[step.due?'Scheduled '+fmt(step.due):'',step.cutoff?'Cutoff '+fmt(step.cutoff):''].filter(Boolean).map(esc).join(' · ')}${late?' · Overdue':''}</span>`:''}
-    ${step.description?`<span class="milestone-note">${esc(step.description)}</span>`:''}
-   </summary>
-   <form class="milestone-editor" data-milestone="${esc(step.id)}">
-    <div class="milestone-date-fields">
-     <label class="field">Scheduled date<input name="date" type="date" value="${esc(step.due?.slice(0,10))}"></label>
-     <label class="field">Time (optional)<input name="time" type="time" value="${esc(step.due?.slice(11,16))}"></label>
-    </div>
-    <label class="field">Hard cutoff<input name="cutoff" type="datetime-local" value="${esc(step.cutoff)}"></label>
-    <label class="field">Step notes<textarea name="notes" rows="2" maxlength="4000" placeholder="Add a note…">${esc(step.description)}</textarea></label>
-    <button type="submit" class="primary small">Save step</button>
-   </form>
-  </details>
-  <button data-child="${esc(step.id)}" class="small" aria-label="Open ${esc(step.title)}">${isBoardTask(step)?esc(step.team):''}${controlIcon('arrow')}</button>
+  <div class="checklist-copy"><strong>${esc(step.title)}</strong>
+   ${step.due||step.cutoff?`<span class="milestone-dates ${late?'milestone-late':''}">${[step.due?'Due '+fmt(step.due):'',step.cutoff?'Cutoff '+fmt(step.cutoff):''].filter(Boolean).map(esc).join(' · ')}${late?' · Overdue':''}</span>`:''}
+   ${step.description?`<span class="milestone-note">${esc(step.description)}</span>`:''}
+  </div>
+  <div class="checklist-shortcuts">${['due','cutoff','notes'].map(key=>shortcutButton(step,key,true)).join('')}
+   <button data-child="${esc(step.id)}" class="small" aria-label="Open ${esc(step.title)}">${isBoardTask(step)?esc(step.team):''}${controlIcon('arrow')}</button>
+  </div>
  </div>`;
 }
-function taskDetail(id,focus,openStep){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),threads=conversations().filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks);
-openDialog(esc(t.workflow||(t.parentId?'Checklist step':'Task')),`${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}<details class="quick-more task-checklist" open><summary>Checklist${children.length?' · '+children.filter(x=>x.status==='Completed').length+'/'+children.length:''}</summary><div class="section-title checklist-add-area"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<button id="show-checklist-add" type="button" aria-controls="checklist-add-editor" aria-expanded="false">${controlIcon('plus')} Add step</button><div id="checklist-add-editor" hidden><form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Assign this step</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label><label class="field">Member<select name="step-owner" form="inline-subtask"><option value="">Default assignment</option>${options(USERS,'')}</select></label></details></div>`}</div><div class="checklist-items">${children.map(step=>checklistItem(step,openStep)).join('')}</div></details><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Notes${t.notes.length?' · '+t.notes.length:''}</summary>${t.notes.map(n=>`<div class="note">${esc(n.body)}<small>${esc(n.author)} · ${esc(fmt(n.date))}</small></div>`).join('')}<form id="note-form" class="inline-form"><textarea name="note" aria-label="Internal note" required placeholder="Add an internal note…"></textarea><button>Add note</button></form></details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`,true);
- bindAttachments();
- document.querySelectorAll('[data-milestone]').forEach(form=>form.onsubmit=event=>{
-  event.preventDefault();
-  const step=children.find(child=>child.id===form.dataset.milestone);
-  const values=new FormData(form);
-  const date=values.get('date'),time=values.get('time');
-  if(time&&!date)return toast('Choose a scheduled date for this time.');
-  const due=date&&time?date+'T'+time:date;
-  const cutoff=values.get('cutoff'),description=values.get('notes').trim();
-  if(due!==step.due||cutoff!==step.cutoff||description!==step.description){
-   Object.assign(step,{due,cutoff,description});
-   activity(step,'Updated dates and notes');
-   save();render();
+function bindTaskShortcuts(task,children){
+ const dialog=$('#detail');
+ let active;
+ const close=(restoreFocus=false)=>{
+  if(!active)return;
+  active.button.setAttribute('aria-expanded','false');
+  active.editor.remove();
+  if(restoreFocus)active.button.focus({preventScroll:true});
+  active=null;
+ };
+ for(const button of dialog.querySelectorAll('[data-task-shortcut]'))button.onclick=()=>{
+  if(active?.button===button){close(true);return;}
+  close();
+  const key=button.dataset.taskShortcut,{label}=taskShortcuts[key];
+  const stepRow=button.closest('[data-step]');
+  const record=stepRow?children.find(step=>step.id===stepRow.dataset.step):task;
+  const editor=document.createElement('form');
+  editor.className='task-shortcut-editor';
+  editor.setAttribute('aria-label',label);
+  const isNote=key==='notes';
+  const current=isNote?'':record[key]||'';
+  editor.innerHTML=isNote?`
+   <textarea name="note" rows="2" maxlength="4000" aria-label="${stepRow?'Step note':'Internal note'}" placeholder="Add a note…">${stepRow?esc(record.description):''}</textarea>
+   <div class="shortcut-actions"><button type="button" data-dismiss>Cancel</button><button class="primary">${stepRow?'Save note':'Add note'}</button></div>
+   ${stepRow?'':record.notes.map(note=>`<div class="note">${esc(note.body)}<small>${esc(note.author)} · ${esc(fmt(note.date))}</small></div>`).join('')}`:`
+   <div class="shortcut-date-fields">
+    <label>Date<input type="date" name="date" required value="${esc(current.slice(0,10))}"></label>
+    <label>Time${key==='due'?' (optional)':''}<input type="time" name="time" ${key==='due'?'':'required'} value="${esc(current.slice(11,16))}"></label>
+   </div>
+   <div class="shortcut-actions">${key==='followUp'&&record.status!=='Completed'?reminderButtons():''}${current?'<button type="button" data-clear-date>Clear</button>':''}<button type="button" data-dismiss>Cancel</button><button class="primary">Save</button></div>`;
+  const anchor=stepRow||button.closest('.task-shortcut-bar');
+  if(stepRow)anchor.append(editor);else anchor.after(editor);
+  active={button,editor};button.setAttribute('aria-expanded','true');
+  const finish=(message,apply)=>{
+   if(apply){apply();activity(record,message);save();render();}
+   const scroll=dialog.scrollTop;
+   taskDetail(task.id);
+   dialog.scrollTop=scroll;
+   const scope=stepRow?[...dialog.querySelectorAll('[data-step]')].find(row=>row.dataset.step===record.id):dialog;
+   scope?.querySelector('[data-task-shortcut='+key+']')?.focus({preventScroll:true});
+  };
+  const setDate=value=>finish(value?'Updated '+label.toLowerCase():'Cleared '+label.toLowerCase(),value===current?null:()=>{record[key]=value;});
+  editor.onsubmit=event=>{
+   event.preventDefault();
+   if(!isNote){
+    const {date,time}=editor.elements;
+    setDate(date.value+(time.value?'T'+time.value:''));
+    return;
+   }
+   const body=editor.elements.note.value.trim();
+   if(stepRow)finish('Updated step note',body===record.description?null:()=>{record.description=body;});
+   else if(body)finish('Internal note added',()=>record.notes.push({body,author:cloud.user?.email||'Ignacio',date:new Date().toISOString()}));
+   else editor.elements.note.focus();
+  };
+  editor.querySelector('[data-dismiss]').onclick=()=>close(true);
+  editor.querySelector('[data-clear-date]')?.addEventListener('click',()=>setDate(''));
+  editor.querySelectorAll('[data-remind]').forEach(preset=>preset.onclick=()=>setDate(reminderValue(preset.dataset.remind)));
+  editor.onkeydown=event=>{
+   if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close(true);}
+   if(isNote&&event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();editor.requestSubmit();}
+  };
+  const input=editor.elements[isNote?'note':'date'];
+  input.focus();
+  if(!isNote&&input.showPicker){
+   try{input.showPicker();}catch{/* The focused native control is still usable. */}
   }
-  taskDetail(id,undefined,step.id);
-  toast('Step saved');
+ };
+}
+function milestoneRail(steps){
+ if(!steps.length)return '';
+ const next=steps.find(step=>step.status!=='Completed');
+ return `<ol class="milestone-rail" aria-label="Shipment milestones">${steps.map(step=>{
+  const complete=step.status==='Completed';
+  return `<li><button type="button" data-milestone-jump="${esc(step.id)}" ${step===next?'aria-current="step"':''}>
+   <span class="milestone-indicator ${complete?'is-done':''}">${complete?controlIcon('check'):''}</span>
+   <span>${esc(step.title)}</span><small>${complete?'Complete':step===next?'Next step':esc(step.status)}</small>
+  </button></li>`;
+ }).join('')}</ol>`;
+}
+function taskDetail(id,focus){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),threads=conversations().filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks);
+openDialog(esc(t.workflow||(t.parentId?'Checklist step':'Task')),`${pendingReply(t,threads)?`<div class="task-reply-callout">${controlIcon('mail')}<span>New email on this task</span><button id="review-task-reply">Review email</button></div>`:''}<div class="task-workspace"><div class="work-brief">${taskProperties(t)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="notice">Waiting on: ${blocks.map(b=>esc(b.title)).join(' · ')}</div>`:''}</div><div class="work-steps"><details class="quick-more task-checklist" open><summary>Checklist${children.length?' · '+children.filter(x=>x.status==='Completed').length+'/'+children.length:''}</summary>${milestoneRail(children)}<div class="section-title checklist-add-area"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<button id="show-checklist-add" type="button" aria-controls="checklist-add-editor" aria-expanded="false">${controlIcon('plus')} Add step</button><div id="checklist-add-editor" hidden><form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Assign this step</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label><label class="field">Member<select name="step-owner" form="inline-subtask"><option value="">Default assignment</option>${options(USERS,'')}</select></label></details></div>`}</div><div class="checklist-items">${children.map(checklistItem).join('')}</div></details></div></div><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`,true);
+ bindAttachments();
+ bindTaskShortcuts(t,children);
+ $('#review-task-reply')?.addEventListener('click',()=>{
+  const thread=$('#detail .task-thread');
+  thread.open=true;
+  thread.querySelector('summary').focus();
+  thread.scrollIntoView?.({block:'nearest'});
  });
+ for(const button of $('#detail').querySelectorAll('[data-milestone-jump]'))button.onclick=()=>{
+  const row=[...$('#detail').querySelectorAll('[data-step]')].find(item=>item.dataset.step===button.dataset.milestoneJump);
+  row?.querySelector('input').focus();
+  row?.scrollIntoView?.({block:'nearest'});
+ };
  document.querySelectorAll('[data-source-email]').forEach(button=>button.onclick=()=>openInboxMessage(button.dataset.sourceEmail));
  $('#mark-mail-reviewed')?.addEventListener('click',()=>{t.mailReviewedAt=new Date().toISOString();save();render();taskDetail(id);});
  $('#edit-task').onclick=()=>taskEditor(id);
@@ -363,12 +442,6 @@ openDialog(esc(t.workflow||(t.parentId?'Checklist step':'Task')),`${taskProperti
  properties.querySelectorAll('[data-add-property]').forEach(picker=>picker.onchange=()=>{if(picker.value)showProperty(picker.value);picker.value='';});
  if(focus)showProperty(focus);
 
-const updateReminder=value=>{
-  t.followUp=value;activity(t,value?'Follow-up reminder set':'Follow-up reminder cleared');save();render();taskDetail(id);
- };
- document.querySelectorAll('[data-remind]').forEach(button=>button.onclick=()=>updateReminder(reminderValue(button.dataset.remind)));
- $('#clear-reminder')?.addEventListener('click',()=>updateReminder(''));
- $('#custom-reminder')?.addEventListener('click',()=>showProperty('followUp'));
  const showAddStep=()=>{
   $('#checklist-add-editor').hidden=false;
   $('#show-checklist-add').hidden=true;
@@ -402,7 +475,8 @@ const updateReminder=value=>{
  }
  save();render();taskDetail(id);
  document.querySelector('[data-complete-child="'+child.id+'"]')?.focus({preventScroll:true});
- });document.querySelectorAll('[data-child]').forEach(b=>b.onclick=()=>taskDetail(b.dataset.child));document.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>draftReply(b.dataset.reply));$('#share-task')?.addEventListener('click',()=>customerView(s.id));$('#link-email').onclick=()=>linkEmail(id);$('#complete-task')?.addEventListener('click',()=>{const issue=moveTask(state.tasks,id,'Completed');if(issue)return toast(issue);activity(t,'Marked complete');save();render();taskDetail(id);toast('Completed — dependent tasks can now move forward');});$('#note-form').onsubmit=e=>{e.preventDefault();const body=new FormData(e.target).get('note').trim();if(!body)return;t.notes.push({body,author:cloud.user?.email||'Ignacio',date:new Date().toISOString()});activity(t,'Internal note added');save();taskDetail(id);};}
+ });document.querySelectorAll('[data-child]').forEach(b=>b.onclick=()=>taskDetail(b.dataset.child));document.querySelectorAll('[data-reply]').forEach(b=>b.onclick=()=>draftReply(b.dataset.reply));$('#share-task')?.addEventListener('click',()=>customerView(s.id));$('#link-email').onclick=()=>linkEmail(id);$('#complete-task')?.addEventListener('click',()=>{const issue=moveTask(state.tasks,id,'Completed');if(issue)return toast(issue);activity(t,'Marked complete');save();render();taskDetail(id);toast('Completed — dependent tasks can now move forward');});}
+
 function mailKey(email){
  return email.connectionId&&email.threadId?email.connectionId+':'+email.threadId:email.id;
 }
@@ -743,14 +817,16 @@ function taskProperties(task){
  const section=(key,title,body)=>`<details class="quick-more task-section" data-task-section="${key}"><summary>${esc(title)}</summary>${body}</details>`;
  const optional=(key,label,value,settings)=>`<div data-optional="${key}" ${value?'':'hidden'}>${field(key,label,value,settings)}</div>`;
  const more=(group,fields)=>`<select class="add-task-property" data-add-property="${group}" aria-label="Add ${group} detail"><option value="">＋ Add ${group} detail</option>${fields}</select>`;
- const due=task.due||'';
  const parent=handoffParent(task);
  return `<div id="inline-properties" class="task-summary">
   ${parent?`<h2 class="shipment-task-heading">${esc(parent.title)}</h2>`:field('title','Shipment reference / task title',task.title,{style:'task-title-value'})}
   ${parent?field('title','Work to do',task.title):''}
   ${customerPicker(task.clientId,{label:taskCustomer(task)})}
   <p class="muted task-reference-line" ${taskReferences(task).length?'':'hidden'}>${esc([...new Set(taskReferences(task))].join(' · '))}</p>
-  ${field('nextAction','Next action',task.nextAction,{display:nextAction(task),style:'task-next-value'})}
+  <div class="task-action-brief">
+   ${field('nextAction','Next action',task.nextAction,{display:nextAction(task),style:'task-next-value'})}
+   ${task.status!=='Completed'&&deadline(task)&&dueTime(deadline(task))<Date.now()?'<span class="task-brief-alert">Overdue</span>':''}
+  </div>
   ${field('description','Description',task.description,{type:'textarea',style:'task-description-value'})}
   <div class="task-summary-pair">
    ${assignmentPicker('status','Status',STATUSES,task.status)}
@@ -758,12 +834,10 @@ function taskProperties(task){
    ${assignmentPicker('owner','Member',USERS,task.owner)}
   </div>
   ${task.status==='Waiting'?field('waitingOn','Waiting on',task.waitingOn):''}
+  <div class="task-shortcut-bar" role="group" aria-label="Dates and notes">
+   ${Object.keys(taskShortcuts).map(key=>shortcutButton(task,key)).join('')}
+  </div>
   <div class="task-tools">
-  ${section('schedule',task.cutoff?'Schedule · Cutoff '+fmt(task.cutoff):due?'Schedule · Due '+fmt(due):'Schedule',[
-   field('due','Requested by',due,{type:dateOnly(due)?'date':'datetime-local',display:due&&fmt(due)}),
-   field('cutoff','Hard cutoff',task.cutoff,{type:'datetime-local',display:task.cutoff&&fmt(task.cutoff)}),
-   field('followUp','Follow-up reminder',task.followUp,{type:'datetime-local',display:task.followUp&&fmt(task.followUp)})
-  ].join(''))}
   ${section('details','Task details',[
    optional('taskType','Type',task.taskType,{choices:options(['',...state.taskTypes],task.taskType||'')}),
    field('priority','Priority',task.priority,{display:task.priority+(task.priorityOverride?' · Manual':''),choices:options(priorities,task.priority)}),
@@ -778,7 +852,7 @@ function taskProperties(task){
     ['customerReference','Customer reference',task.customerReference],['ftzReference','FTZ reference',task.ftzReference]
    ].filter(([, ,value])=>!value).map(([key,label])=>`<option value="${key}">${label}</option>`).join(''))
   ].join(''))}
-  <details class="quick-more task-follow-up"><summary>${task.followUp?'Reminder · '+esc(fmt(task.followUp)):'Set reminder'}</summary>${task.status==='Completed'?'':`<div class="actions task-reminders">${reminderButtons()}<button id="custom-reminder">Pick a time</button>${task.followUp?'<button id="clear-reminder">Clear reminder</button>':''}</div>`}</details>
+
   </div>
  </div>`;
 }
