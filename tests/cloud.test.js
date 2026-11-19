@@ -381,6 +381,17 @@ test('Ocean Export checklist saves independent scheduled dates, cutoffs and note
   const loading=stepForm('Container loading','due');
   loading.elements.date.value='2026-11-20';
   submit(loading);
+  const timing=doc.querySelector('[data-timing-target]');
+  assert.match(timing.textContent,/Container loading/);
+  assert.equal(timing.dataset.timingKey,'due');
+  doc.querySelector('.task-checklist').open=false;
+  timing.click();
+  assert.equal(doc.querySelector('.task-checklist').open,true);
+  const dateEditor=doc.querySelector('.checklist-item .task-shortcut-editor');
+  assert.equal(dateEditor.closest('[data-step]').dataset.step,timing.dataset.timingTarget);
+  assert.equal(dateEditor.elements.date.value,'2026-11-20');
+  dateEditor.querySelector('[data-dismiss]').click();
+  assert.equal(doc.querySelector('.shipment-progress').value,1);
   await new Promise(resolve=>setTimeout(resolve,100));
   assert.equal(snapshot.tasks.find(task=>task.title.startsWith('Documentation cutoff')).cutoff,'2026-11-21T16:00');
   assert.equal(snapshot.tasks.find(task=>task.title.startsWith('Container loading')).due,'2026-11-20');
