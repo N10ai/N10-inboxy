@@ -1,6 +1,6 @@
-import {defaultTypes,priorities,taskLinks,deadline,dateOnly,dueTime,isActionable,mailSuggestions,suggestTaskType,relatedTaskIds} from './planning.js';
+import {defaultTypes,priorities,taskLinks,deadline,dateOnly,dueTime,isActionable,mailSuggestions,suggestTaskType,relatedTaskIds,cutoffRevision} from './planning.js?v=8';
 import {cloud,startCloud,saveCloud,refreshCloud,logout,accessPanel,mailAction} from './cloud.bundle.js?v=3';
-import {TEAMS as DEFAULT_TEAMS,STATUSES,USERS as DEFAULT_USERS,uid,seed,priority,blockedBy,completionIssue,customerSnapshot,parseEmail,moveTask,removeGroup,setTaskGroup} from './domain.js?v=7';
+import {TEAMS as DEFAULT_TEAMS,STATUSES,USERS as DEFAULT_USERS,uid,seed,priority,blockedBy,descendants,completionIssue,customerSnapshot,parseEmail,moveTask,removeGroup,setTaskGroup} from './domain.js?v=7';
 const KEY='inboxy.workspace.v1';
 let state;try{state=JSON.parse(localStorage.getItem(KEY))||seed();if(state.version!==1||!Array.isArray(state.tasks))throw Error();}catch{state=seed();}
 function migrateWorkspace(data){
@@ -387,11 +387,13 @@ function shipmentTiming(task,steps,now=Date.now()){
   <strong>${record===task?'Shipment deadline':esc(record.title)}</strong></span>${controlIcon('edit')}
  </button>`;
 }
-function taskDetail(id,focus){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),threads=conversations().filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks),done=children.filter(step=>step.status==='Completed').length,next=nextChecklistStep(t,children);
-openDialog(esc(t.workflow||(t.parentId?'Checklist step':'Task')),`${pendingReply(t,threads)?`<div class="task-reply-callout">${controlIcon('mail')}<span>New email on this task</span><button id="review-task-reply">Review email</button></div>`:''}<div class="task-workspace"><div class="work-brief">${taskProperties(t,shipmentTiming(t,children),next)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="shipment-blockers"><strong>Blocked by</strong>${blocks.map(b=>`<button type="button" data-open-blocker="${esc(b.id)}">${esc(taskHeading(b))} ${controlIcon('arrow')}</button>`).join('')}</div>`:''}</div><div class="work-steps"><details class="quick-more task-checklist" open><summary>Checklist${children.length?' · '+done+'/'+children.length:''}</summary>${children.length?`<progress class="shipment-progress" aria-label="Checklist completion" max="${children.length}" value="${done}"></progress>`:''}<div class="section-title checklist-add-area"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<button id="show-checklist-add" type="button" aria-controls="checklist-add-editor" aria-expanded="false">${controlIcon('plus')} Add step</button><div id="checklist-add-editor" hidden><form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Assign this step</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label><label class="field">Member<select name="step-owner" form="inline-subtask"><option value="">Default assignment</option>${options(USERS,'')}</select></label></details></div>`}</div>${shipmentChecklist(children,next)}</details></div></div><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`,true);
+function taskDetail(id,focus){const t=state.tasks.find(t=>t.id===id);if(!t)return;const s=shipment(t.shipmentId),children=checklist(id),cutoffThreads=conversations(),threads=cutoffThreads.filter(thread=>thread.taskIds.includes(id)),emails=threads.flatMap(thread=>thread.messages),blocks=blockedBy(t,state.tasks),done=children.filter(step=>step.status==='Completed').length,next=nextChecklistStep(t,children);
+const cutoffReviews=cutoffThreads.map(cutoffCase).filter(review=>review?.targets.some(task=>task===t||children.includes(task)));
+openDialog(esc(t.workflow||(t.parentId?'Checklist step':'Task')),`${cutoffReviews.map(review=>`<div class="task-reply-callout"><span>Cutoff change · ${esc(review.email.subject)}</span>${cutoffReviewButton(review)}</div>`).join('')}${pendingReply(t,threads)?`<div class="task-reply-callout">${controlIcon('mail')}<span>New email on this task</span><button id="review-task-reply">Review email</button></div>`:''}<div class="task-workspace"><div class="work-brief">${taskProperties(t,shipmentTiming(t,children),next)}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="shipment-blockers"><strong>Blocked by</strong>${blocks.map(b=>`<button type="button" data-open-blocker="${esc(b.id)}">${esc(taskHeading(b))} ${controlIcon('arrow')}</button>`).join('')}</div>`:''}</div><div class="work-steps"><details class="quick-more task-checklist" open><summary>Checklist${children.length?' · '+done+'/'+children.length:''}</summary>${children.length?`<progress class="shipment-progress" aria-label="Checklist completion" max="${children.length}" value="${done}"></progress>`:''}<div class="section-title checklist-add-area"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<button id="show-checklist-add" type="button" aria-controls="checklist-add-editor" aria-expanded="false">${controlIcon('plus')} Add step</button><div id="checklist-add-editor" hidden><form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Assign this step</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label><label class="field">Member<select name="step-owner" form="inline-subtask"><option value="">Default assignment</option>${options(USERS,'')}</select></label></details></div>`}</div>${shipmentChecklist(children,next)}</details></div></div><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`,true);
  bindAttachments();
  bindTaskShortcuts(t,children);
  const detail=$('#detail');
+ bindCutoffReviews(detail,cutoffThreads,()=>taskDetail(id));
  const checklistRows=new Map([...detail.querySelectorAll('[data-step]')].map(row=>[row.dataset.step,row]));
  for(const button of detail.querySelectorAll('[data-open-blocker]'))button.onclick=()=>taskDetail(button.dataset.openBlocker);
  detail.querySelector('[data-timing-target]')?.addEventListener('click',event=>{
@@ -552,6 +554,91 @@ function conversations(){
   return {key,messages,latest:messages[0],taskIds:relatedTaskIds(messages),shipmentIds:[...new Set(messages.flatMap(message=>message.shipmentIds||[]))]};
  }).sort((a,b)=>String(b.latest.date||'').localeCompare(String(a.latest.date||'')));
 }
+function cutoffCase(thread){
+ if(thread.latest.deletedAt)return null;
+ for(const email of thread.messages){
+  if(email.deletedAt)continue;
+  const proposal=cutoffRevision(email);
+  if(!proposal)continue;
+  if(state.tasks.some(task=>task.activity.some(entry=>entry.cutoffReview&&entry.emailId===email.id)))return null;
+  const eligible=state.tasks.filter(task=>task.status!=='Completed'&&task.cutoff);
+  const linked=eligible.filter(task=>thread.taskIds.includes(task.id));
+  const reference=mailSuggestions(email,state).ourReference.toLowerCase();
+  const matched=eligible.filter(task=>thread.shipmentIds.includes(task.shipmentId)||
+   reference&&taskReferences(task).some(ref=>ref.toLowerCase()===reference)||
+   reference&&shipment(task.shipmentId)?.reference.toLowerCase()===reference);
+  const targets=[...new Set([...linked,...matched])];
+  if(targets.length===1&&targets[0].cutoff===proposal.value)return null;
+  return {email,proposal,targets};
+ }
+ return null;
+}
+function cutoffReviewButton(review){
+ return `<button class="primary" data-review-cutoff="${esc(review.email.id)}">Review cutoff</button>`;
+}
+function bindCutoffReviews(root,threads,back){
+ for(const button of root.querySelectorAll('[data-review-cutoff]'))button.onclick=()=>{
+  const thread=threads.find(item=>item.messages.some(email=>email.id===button.dataset.reviewCutoff));
+  if(thread)reviewCutoff(thread.key,back);
+ };
+}
+function cutoffConflicts(task,value){
+ if(!value)return [];
+ const related=new Set([...descendants(task.id,state.tasks),...state.tasks.filter(item=>
+  task.shipmentId&&item.shipmentId===task.shipmentId||item.dependencies.includes(task.id))]);
+ return [...related].filter(item=>item!==task&&item.status!=='Completed').flatMap(item=>
+  [['Due date',item.due],['Hard cutoff',item.cutoff]].filter(([,date])=>date&&(
+   dateOnly(date)?date>value.slice(0,10):dueTime(date)>dueTime(value))).map(([label,date])=>({item,label,date})));
+}
+function reviewCutoff(threadKey,back){
+ const latest=()=>{const thread=conversations().find(item=>item.key===threadKey);return thread&&cutoffCase(thread);};
+ const review=latest();
+ if(!review)return toast('This cutoff revision is already resolved or unavailable.');
+ const {email,proposal,targets}=review;
+ const choices=targets.length?targets:state.tasks.filter(task=>task.status!=='Completed'&&task.cutoff);
+ const priorCutoffs=new Map(choices.map(task=>[task.id,task.cutoff]));
+ openDialog('Review cutoff change',`<div class="note"><strong>${esc(email.subject)}</strong><small>${esc(email.from)} · ${esc(fmt(email.date))}</small><p>${esc(proposal.source)}</p>
+  <details><summary>Source email</summary><p>${esc(email.body)}</p></details></div>
+  <form id="cutoff-review-form">
+   <label class="field">Task<select name="target" required>
+    ${targets.length===1?'':'<option value="">Choose the task for this cutoff</option>'}
+    ${choices.map(task=>`<option value="${esc(task.id)}">${esc(task.title)} · ${esc(taskHeading(task))} · ${esc(task.owner)}</option>`).join('')}
+   </select></label>
+   ${targets.length?'':`<p class="muted">${choices.length?'No matching task found. Choose the task with the current hard cutoff.':'Set a hard cutoff on the shipment task before reviewing revisions.'}</p>`}
+   <div class="cutoff-comparison"><div><small>Current cutoff</small><strong id="cutoff-current">Choose a task</strong></div>
+    <label class="field">Proposed cutoff (local time)<input name="cutoff" type="datetime-local" required value="${esc(proposal.value)}"></label></div>
+   <div id="cutoff-impacts" aria-live="polite"></div>
+  </form>`,`<button id="cancel-cutoff-review">Back</button><button id="keep-current-cutoff" ${choices.length?'':'disabled'}>Keep current cutoff</button><button class="primary" type="submit" form="cutoff-review-form" ${choices.length?'':'disabled'}>Confirm cutoff</button>`);
+ const form=$('#cutoff-review-form'),target=()=>choices.find(task=>task.id===form.elements.target.value);
+ const refresh=()=>{
+  const task=target(),value=form.elements.cutoff.value;
+  $('#cutoff-current').textContent=task?fmt(task.cutoff):'Choose a task';
+  const conflicts=task?cutoffConflicts(task,value):[];
+  $('#cutoff-impacts').innerHTML=task&&value?`<h3>Dates to review after the proposed cutoff</h3>${conflicts.length?`<ul>${conflicts.map(({item,label,date})=>
+   `<li><strong>${esc(item.title)}</strong> · ${esc(item.owner)} · ${label} ${esc(fmt(date))}</li>`).join('')}</ul>`:'<p class="muted">No related open tasks with dates after this cutoff.</p>'}`:'';
+ };
+ form.oninput=refresh;
+ refresh();
+ $('#cancel-cutoff-review').onclick=()=>{if(back)back();else $('#detail').close();};
+ const resolve=apply=>{
+  const task=target(),value=form.elements.cutoff.value;
+  if(!task){form.elements.target.reportValidity();return;}
+  if(apply&&!form.reportValidity())return;
+  const current=latest();
+  if(!current||current.email.id!==email.id||!state.tasks.includes(task)||task.status==='Completed'||
+   priorCutoffs.get(task.id)!==task.cutoff||current.targets.length&&!current.targets.includes(task))
+   return toast('The task or email has changed. Reopen the review.');
+  if(apply&&task.cutoff===value)return toast('This is already the current cutoff.');
+  const previous=task.cutoff;
+  if(apply)task.cutoff=value;
+  addMailLink(email,task.id);
+  activity(task,apply?'Cutoff changed from '+fmt(previous)+' to '+fmt(value):'Kept current cutoff '+fmt(previous));
+  Object.assign(task.activity[0],{emailId:email.id,cutoffReview:true,previousCutoff:previous,...(apply?{confirmedCutoff:value}:{})});
+  save();render();taskDetail(task.id);toast(apply?'Cutoff updated':'Current cutoff kept');
+ };
+ $('#keep-current-cutoff').onclick=()=>resolve(false);
+ form.onsubmit=event=>{event.preventDefault();resolve(true);};
+}
 function pendingReply(task,threads){
  const latest=threads.find(thread=>!thread.latest.deletedAt&&thread.taskIds.includes(task.id))?.latest;
  return latest&&new Date(latest.date)>new Date(task.mailReviewedAt||task.activity.at(-1)?.date||0)?latest:null;
@@ -574,6 +661,7 @@ function inboxHTML(){
  const e=thread?.latest;
  const tasks=state.tasks.filter(t=>thread?.taskIds.includes(t.id));
  const reviewTasks=thread?emailUpdateCandidates(thread):[];
+ const cutoff=thread?cutoffCase(thread):null;
  const toolbar=`<div class="inbox-toolbar">
   <input type="search" id="mail-search" aria-label="Search email" placeholder="Search email" value="${esc(mailQuery)}">
   <select id="mail-folder" aria-label="Mailbox folder">${options(['Inbox','Linked','Archived','Trash'],inboxFilter)}</select><button id="mail-select-mode" aria-pressed="${mailSelecting}">${mailSelecting?'Cancel':'Select'}</button>
@@ -600,6 +688,7 @@ function inboxHTML(){
   </header>
   ${tasks.map((t,index)=>`<div class="actions"><button ${index===0?'id="open-linked"':''} data-open-linked="${esc(t.id)}">${esc(t.title)}</button><button data-unlink-task="${esc(t.id)}" aria-label="Unlink ${esc(t.title)}">Unlink</button></div>`).join('')}
   ${thread.shipmentIds.map(id=>`<span class="actions"><button data-email-operation="${esc(id)}">${esc(shipment(id)?.reference)}</button><button data-unlink-operation="${esc(id)}">Unlink operation</button></span>`).join('')}
+  ${cutoff?`<div class="task-reply-callout"><span>Cutoff change · ${esc(cutoff.email.subject)}</span>${cutoffReviewButton(cutoff)}</div>`:''}
   ${inboxFilter==='Trash'?'':emailReview(e,reviewTasks)}
   ${inboxFilter!=='Trash'&&captureEmailId===e.id?composerHTML(e):''}
   ${thread.messages.map((message,index)=>`<details class="mail-message" ${(index===0||message.id===selectedEmail)?'open':''}><summary><strong>${esc(message.from)}</strong><time>${esc(fmt(message.date))}</time></summary><pre>${esc(message.body)}</pre>${attachmentButtons(message)}</details>`).join('')}
@@ -610,6 +699,7 @@ function bindInbox(){
  const search=$('#mail-search');
  const thread=conversations().find(item=>item.latest.id===$('[data-reader]')?.dataset.reader);
  const e=thread?.latest;
+ if(thread)bindCutoffReviews($('#app'),[thread]);
  if(search)search.oninput=()=>{
   mailQuery=search.value;render();$('#mail-search').focus();
  };
@@ -651,15 +741,26 @@ function bindInbox(){
 function todayHTML(){
  const now=Date.now(),threads=conversations();
  const list=state.tasks.filter(t=>isBoardTask(t)&&t.status!=='Completed');
- const rows=(tasks,reason)=>tasks.map(task=>`<article class="today-row" data-task="${esc(task.id)}" tabindex="0">
+ const rows=(tasks,reason,actions)=>tasks.map(task=>`<article class="today-row" data-task="${esc(task.id)}" tabindex="0">
   <div><strong>${esc(taskHeading(task))}</strong><small>${esc([taskCustomer(task),task.waitingOn||task.owner,reason(task)].filter(Boolean).join(' · '))}</small></div>
-  <div class="actions"><button data-today-assign="${esc(task.id)}">Assign</button><button data-today-snooze="${esc(task.id)}">Snooze</button><button data-today-done="${esc(task.id)}">Done</button></div>
+  <div class="actions">${actions?actions(task):`<button data-today-assign="${esc(task.id)}">Assign</button><button data-today-snooze="${esc(task.id)}">Snooze</button><button data-today-done="${esc(task.id)}">Done</button>`}</div>
  </article>`).join('')||'<p class="muted">Nothing in this queue.</p>';
  const replies=list.filter(t=>pendingReply(t,threads));
  const followups=list.filter(t=>t.followUp&&+new Date(t.followUp)<=now);
  const due=list.filter(t=>deadline(t)&&dueTime(deadline(t))<=now+86400000).sort((a,b)=>dueTime(deadline(a))-dueTime(deadline(b)));
+ const cutoffReviews=threads.map(cutoffCase).filter(Boolean);
+ const affected=new Map();
+ for(const task of state.tasks.filter(item=>item.status!=='Completed'&&item.cutoff)){
+  const approved=task.activity.find(entry=>entry.confirmedCutoff);
+  if(approved?.confirmedCutoff!==task.cutoff)continue;
+  for(const {item,label,date} of cutoffConflicts(task,task.cutoff)){
+   if(!affected.has(item))affected.set(item,label+' '+fmt(date)+' · after cutoff '+fmt(task.cutoff));
+  }
+ }
  const waiting=list.filter(t=>t.status==='Waiting'&&!replies.includes(t)&&!followups.includes(t));
  return `<div class="today-grid">
+  ${cutoffReviews.length?`<section class="panel"><h2>Cutoff changes <small>${cutoffReviews.length}</small></h2>${cutoffReviews.map(review=>`<div class="today-row"><div><strong>${esc(review.email.subject)}</strong><small>${esc(review.targets.length===1?taskHeading(review.targets[0]):'Task match needs review')}</small></div>${cutoffReviewButton(review)}</div>`).join('')}</section>`:''}
+  ${affected.size?`<section class="panel"><h2>Dates to review <small>${affected.size}</small></h2>${rows([...affected.keys()],task=>affected.get(task),task=>`<button data-row-dates="${esc(task.id)}" data-date-kind="deadline">Review dates</button>`)}</section>`:''}
   <section class="panel"><h2>New replies <small>${replies.length}</small></h2>${rows(replies,t=>pendingReply(t,threads).subject)}</section>
   <section class="panel"><h2>Follow up <small>${followups.length}</small></h2>${rows(followups,t=>fmt(t.followUp))}</section>
   <section class="panel"><h2>Due in 24 hours or overdue <small>${due.length}</small></h2>${rows(due,t=>fmt(deadline(t)))}</section>
@@ -667,6 +768,8 @@ function todayHTML(){
  </div>`;
 }
 function bindToday(){
+ bindCutoffReviews($('#app'),conversations());
+ document.querySelectorAll('.today-grid [data-row-dates]').forEach(button=>button.onclick=()=>rowDates(button));
  document.querySelectorAll('[data-today-assign]').forEach(b=>b.onclick=()=>taskDetail(b.dataset.todayAssign,'owner'));
  document.querySelectorAll('[data-today-snooze]').forEach(b=>b.onclick=()=>{
   const task=state.tasks.find(t=>t.id===b.dataset.todaySnooze);
