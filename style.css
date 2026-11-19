@@ -1320,3 +1320,15 @@ body::before { background: none; }
  #app :is(.topbar,.sidebar,.glass-dock,.desktop-actions,.main,.panel,.group-tile,.mail,.table-wrap,.auth-card),
  #detail,#detail::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
+
+#app .operation-card :is(.next-action,.blocked-line,.card-signals) .control-icon {
+ width: .8rem;
+ height: .8rem;
+}
+@media(min-width:761px) {
+ #app .sidebar .nav button[data-page=settings]>span {
+  white-space: normal;
+  overflow: visible;
+  line-height: 1.22;
+ }
+}
