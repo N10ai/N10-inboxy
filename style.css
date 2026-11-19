@@ -1110,22 +1110,6 @@ button { border-color: #fff7; }
 .task-reply-callout>button{margin-left:auto}
 .task-reply-callout>svg{width:18px;height:18px;flex:none}
 #detail.task-dialog .task-checklist>summary{order:0}
-.milestone-rail{
- order:1;display:flex;gap:.3rem;list-style:none;overflow-x:auto;overscroll-behavior-inline:contain;
- padding:.2rem .2rem .55rem;margin:.15rem 0 .4rem;scroll-snap-type:x proximity
-}
-.milestone-rail li{flex:1 0 112px;min-width:0;scroll-snap-align:start}
-#detail .milestone-rail button{
- position:relative;display:grid;align-content:start;gap:.28rem;text-align:left;width:100%;height:100%;
- min-height:80px;padding:.5rem;font-size:.72rem;line-height:1.25;overflow-wrap:anywhere;background:#fff9;
- border-radius:9px;color:var(--control-ink);border:1px solid var(--control-line)
-}
-#detail .milestone-rail button:hover,#detail .milestone-rail button[aria-current=step]{background:#f1e2d4;border-color:#b98a70}
-.milestone-rail small{color:var(--control-muted)}
-.milestone-indicator{width:15px;height:15px;display:grid;place-items:center;border:1px solid #a58b77;border-radius:50%}
-.milestone-indicator.is-done{background:#356a55;color:white;border-color:#356a55}
-.milestone-indicator svg{width:11px;height:11px}
-[aria-current=step] .milestone-indicator{border:4px solid #8e503a}
 #detail.task-dialog .checklist-items{order:2}
 #detail.task-dialog .checklist-add-area{order:3}
 @media(min-width:850px){
@@ -1152,8 +1136,16 @@ button { border-color: #fff7; }
 .shipment-progress{order:1;width:100%;height:5px;border:0;border-radius:20px;overflow:hidden;accent-color:#356a55}
 .shipment-progress::-webkit-progress-bar{background:#e9dfd4;border-radius:20px}
 .shipment-progress::-webkit-progress-value{background:#356a55;border-radius:20px}
-#detail .milestone-rail button[data-overdue]{border-color:#d09682}
-#detail .milestone-rail button[data-overdue] small{color:#85351f;font-weight:650}
-@media(min-width:850px){
- .milestone-rail{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,90px),1fr));overflow:visible}
+#detail .checklist-item[aria-current="step"]{background:#f0e5d9;border-radius:10px}
+.checklist-next-label{display:block;font-size:.7rem;font-weight:650;color:#79412e;margin-top:.2rem}
+#detail .completed-steps{margin-top:.5rem;border-top:1px solid var(--control-line)}
+#detail .completed-steps>summary{padding:.55rem .3rem;color:var(--control-muted);font-size:.8rem;cursor:pointer}
+#detail #finish-next-step{
+ display:inline-flex;align-items:center;gap:.35rem;margin:.3rem .25rem .15rem;
+ min-height:36px;padding:.3rem .55rem;font-size:.78rem;font-weight:650;background:#fff9;color:var(--control-ink)
+}
+#detail #finish-next-step[hidden]{display:none}
+#finish-next-step .control-icon{width:16px;height:16px}
+@media(max-width:600px){
+ #detail #finish-next-step{min-height:44px}
 }

@@ -289,6 +289,7 @@ test('transport template creates a checklist and task card reveals one inline ed
   task.querySelector('[name="nextAction"]').value='Call terminal';
   task.querySelector('[name="nextAction"]').dispatchEvent(new w.Event('change'));
   assert.match(task.querySelector('[data-property="nextAction"]').textContent,/Call terminal/);
+  assert.equal(task.querySelector('#finish-next-step').hidden,true);
   assert.ok(task.querySelector('.task-assignment select[name="owner"]'));
   assert.ok(task.querySelector('.task-assignment select[name="team"]'));
   await new Promise(resolve=>setTimeout(resolve,100));
@@ -359,13 +360,14 @@ test('Ocean Export checklist saves independent scheduled dates, cutoffs and note
   capture.elements.workflow.dispatchEvent(new w.Event('change'));
   submit(capture);
   doc.querySelector('#task-results .card-open').click();
-  const firstMilestone=doc.querySelector('.milestone-rail [aria-current="step"]');
+  const firstMilestone=doc.querySelector('[data-step][aria-current="step"]');
   assert.ok(firstMilestone);
-  firstMilestone.click();
-  assert.equal(doc.activeElement.dataset.completeChild,firstMilestone.dataset.milestoneJump);
-  doc.activeElement.click();
-  assert.equal(doc.querySelector('.milestone-rail .is-done').closest('button').dataset.milestoneJump,firstMilestone.dataset.milestoneJump);
-  assert.notEqual(doc.querySelector('.milestone-rail [aria-current="step"]').dataset.milestoneJump,firstMilestone.dataset.milestoneJump);
+  doc.querySelector('#finish-next-step').click();
+  const completed=doc.querySelector('.completed-steps');
+  assert.equal(completed.open,false);
+  assert.equal(completed.querySelector('[data-step]').dataset.step,firstMilestone.dataset.step);
+  assert.notEqual(doc.querySelector('[data-step][aria-current="step"]').dataset.step,firstMilestone.dataset.step);
+  assert.equal(doc.activeElement.id,'finish-next-step');
   const stepForm=(title,key)=>{
    const row=[...doc.querySelectorAll('[data-step]')].find(item=>item.querySelector('strong').textContent.includes(title));
    row.querySelector(`[data-task-shortcut="${key}"]`).click();
@@ -416,6 +418,8 @@ test('a completed checklist step can be unchecked and reopens its completed pare
   doc.querySelector('[data-complete-child]').click();
   assert.equal(doc.querySelector('[data-complete-child]').checked,true);
   doc.querySelector('#complete-task').click();
+  doc.querySelector('.completed-steps summary').click();
+  assert.equal(doc.querySelector('.completed-steps').open,true);
   doc.querySelector('[data-complete-child]').click();
   assert.equal(doc.querySelector('[data-complete-child]').checked,false);
   await new Promise(resolve=>setTimeout(resolve,100));
