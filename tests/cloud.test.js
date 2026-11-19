@@ -550,3 +550,52 @@ test('desktop quick actions and compact task editor open the intended controls',
   assert.equal(doc.activeElement,doc.querySelector('#inline-subtask input'));
  }finally{dom.window.close();}
 });
+
+test('a revised cutoff requires confirmation and leaves conflicting pickup dates for review',async()=>{
+ const task={id:'cutoff-job',title:'Confirm consolidation cutoff',team:'Ops',owner:'Ignacio',shipmentId:'op',status:'In progress',priority:'Normal',cutoff:'2027-01-20T16:00',dependencies:[],notes:[],activity:[]};
+ const pickup={...task,id:'pickup-job',title:'Book pickup',owner:'Carlos',cutoff:'',due:'2027-01-20T13:00',activity:[]};
+ const overview={id:'op',reference:'SHP-2000',customer:'Coastal',documents:[]};
+ const mail={id:'revision',from:'Carrier <carrier@example.invalid>',subject:'Shipment: SHP-2000',body:'Revised cargo cutoff: 2027-01-20 12:00\n\n> Cutoff: 2027-01-20 16:00',date:'2027-01-19T10:00:00Z'};
+ const {dom,w,snapshot}=await app(true,{tasks:[task,pickup],shipments:[overview],emails:[mail]});
+ try{
+  const doc=w.document;
+  doc.querySelector('[data-page="today"]').click();
+  doc.querySelector('[data-review-cutoff]').click();
+  const form=doc.querySelector('#cutoff-review-form');
+  assert.equal(form.elements.target.value,task.id);
+  assert.equal(form.elements.cutoff.value,'2027-01-20T12:00');
+  assert.match(doc.querySelector('#cutoff-current').textContent,/4:00/);
+  assert.match(doc.querySelector('#cutoff-impacts').textContent,/Book pickup.*Carlos/);
+  assert.equal(snapshot.tasks[0].cutoff,'2027-01-20T16:00');
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks[0].cutoff,'2027-01-20T12:00');
+  assert.equal(snapshot.tasks[0].activity[0].emailId,mail.id);
+  assert.equal(snapshot.tasks[1].due,'2027-01-20T13:00');
+  assert.equal(doc.querySelector('[data-review-cutoff]'),null);
+  assert.match(doc.querySelector('.today-grid').textContent,/Dates to review[\s\S]*Book pickup/);
+  doc.querySelector('[data-close]').click();
+  doc.querySelector('[data-row-dates="pickup-job"]').click();
+  assert.equal(doc.querySelector('#requested-time').value,'13:00');
+ }finally{dom.window.close();}
+});
+
+test('a cutoff with several matching tasks and an ambiguous time requires manual review',async()=>{
+ const base={title:'Consolidation',team:'Ops',owner:'Ignacio',shipmentId:'op',status:'In progress',priority:'Normal',cutoff:'2027-01-20T16:00',dependencies:[],notes:[],activity:[]};
+ const mail={id:'revision',from:'Carrier <carrier@example.invalid>',subject:'Shipment: SHP-2000',body:'New cutoff: Friday noon ET',date:'2027-01-19T10:00:00Z'};
+ const {dom,w,snapshot}=await app(true,{tasks:[{...base,id:'first'},{...base,id:'second',activity:[]}],shipments:[{id:'op',reference:'SHP-2000'}],emails:[mail]});
+ try{
+  const doc=w.document;
+  doc.querySelector('[data-page="today"]').click();
+  doc.querySelector('[data-review-cutoff]').click();
+  const form=doc.querySelector('#cutoff-review-form');
+  assert.equal(form.elements.target.value,'');
+  assert.equal(form.elements.cutoff.value,'');
+  form.elements.target.value='second';
+  doc.querySelector('#keep-current-cutoff').click();
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks[1].cutoff,base.cutoff);
+  assert.equal(snapshot.tasks[1].activity[0].emailId,mail.id);
+  assert.equal(doc.querySelector('[data-review-cutoff]'),null);
+ }finally{dom.window.close();}
+});

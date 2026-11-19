@@ -1332,3 +1332,19 @@ body::before { background: none; }
   line-height: 1.22;
  }
 }
+
+.cutoff-comparison {
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));
+ gap:.7rem;
+ margin:.8rem 0;
+ padding:.7rem;
+ background:var(--glass-panel);
+ border:1px solid var(--glass-edge);
+ border-radius:12px;
+}
+.cutoff-comparison>div { display:grid;align-content:start;gap:.35rem }
+.cutoff-comparison small { color:var(--control-muted) }
+#cutoff-impacts ul { padding-inline-start:1.25rem;line-height:1.6 }
+
+#detail .dialog-footer:has(#keep-current-cutoff) { flex-wrap:wrap }

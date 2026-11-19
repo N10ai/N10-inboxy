@@ -47,3 +47,18 @@ export function suggestTaskType(title, types) {
 export function relatedTaskIds(messages) {
  return [...new Set(messages.flatMap(taskLinks))];
 }
+
+// Suggest a date only when the revision gives one exact local date and time.
+export function cutoffRevision(message) {
+ const content=(message.body||'').split(/^\s*(?:>|On .+ wrote:|-----Original Message-----)/mi)[0];
+ const lines=content.split(/\r?\n/).map(line=>line.trim()).filter(line=>
+  /^(?:(?:the )?(?:new|revised|updated) (?:[\w-]+ ){0,3}cut[ -]?off\b|(?:the )?(?:[\w-]+ ){0,3}cut[ -]?off (?:has been |is |was )?(?:changed|revised|moved|updated)\b)/i.test(line));
+ if(!lines.length)return null;
+ const exact=lines.length===1&&lines[0].match(/(?:\bto\s+|:\s*|\bis\s+)(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})[.!]?$/i);
+ const value=exact?exact[1]+'T'+exact[2]:'';
+ const date=value&&new Date(value);
+ const valid=date&&Number.isFinite(+date)&&date.getFullYear()===Number(value.slice(0,4))&&
+  date.getMonth()+1===Number(value.slice(5,7))&&date.getDate()===Number(value.slice(8,10))&&
+  date.getHours()===Number(value.slice(11,13))&&date.getMinutes()===Number(value.slice(14));
+ return {source:lines.join('\n'),value:valid?value:''};
+}
