@@ -1,4 +1,4 @@
-import {defaultTypes,priorities,taskLinks,deadline,dateOnly,dueTime,isActionable,mailSuggestions,suggestTaskType,relatedTaskIds,cutoffRevision} from './planning.js?v=8';
+import {defaultTypes,priorities,taskLinks,deadline,dateOnly,dueTime,isActionable,mailSuggestions,suggestTaskType,relatedTaskIds,cutoffRevision,exactReferenceIn,taskReportCsv} from './planning.js?v=9';
 import {cloud,startCloud,saveCloud,refreshCloud,logout,accessPanel,mailAction} from './cloud.bundle.js?v=3';
 import {TEAMS as DEFAULT_TEAMS,STATUSES,USERS as DEFAULT_USERS,uid,seed,priority,blockedBy,descendants,completionIssue,customerSnapshot,parseEmail,moveTask,removeGroup,setTaskGroup} from './domain.js?v=8';
 const KEY='inboxy.workspace.v1';
@@ -172,6 +172,9 @@ const captureDraft=currentComposer&&{
  customer:currentComposer.elements.customerChoice.value,
  description:currentComposer.elements.description.value,
  detailsOpen:currentComposer.querySelector('.capture-extras').open,
+ suggestions:currentComposer.elements.applySuggestions?.checked,
+ dates:currentComposer.elements.applySuggestedDates?.checked,
+ suggestedValues:[...currentComposer.querySelectorAll('[data-suggested-field]')].map(field=>field.value),
  steps:[...currentComposer.querySelectorAll('[name=workflowStep]')].map(input=>input.checked),
 };
 const active=state.tasks.filter(t=>isBoardTask(t)&&t.status!=='Completed');
@@ -200,6 +203,11 @@ $('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass
   composer.elements.title.value=captureDraft.title;
   composer.elements.description.value=captureDraft.description;
   composer.querySelector('.capture-extras').open=captureDraft.detailsOpen;
+  if(composer.elements.applySuggestions){
+   composer.elements.applySuggestions.checked=captureDraft.suggestions;
+   if(composer.elements.applySuggestedDates)composer.elements.applySuggestedDates.checked=captureDraft.dates??false;
+   composer.querySelectorAll('[data-suggested-field]').forEach((field,index)=>{field.value=captureDraft.suggestedValues[index]??field.value;});
+  }
   setCustomerChoice(composer,captureDraft.customer);
   composer.elements.workflow.value=captureDraft.workflow;
   composer.elements.workflow.onchange();
@@ -739,6 +747,7 @@ function inboxHTML(){
  const tasks=state.tasks.filter(t=>thread?.taskIds.includes(t.id));
  const reviewTasks=thread?emailUpdateCandidates(thread):[];
  const cutoff=thread?cutoffCase(thread):null;
+ const match=thread&&inboxFilter!=='Trash'&&!thread.taskIds.length?suggestedMailTask(thread):null;
  const toolbar=`<div class="inbox-toolbar">
   <input type="search" id="mail-search" aria-label="Search email" placeholder="Search email" value="${esc(mailQuery)}">
   <select id="mail-folder" aria-label="Mailbox folder">${options(['Inbox','Linked','Archived','Trash'],inboxFilter)}</select><button id="mail-select-mode" aria-pressed="${mailSelecting}">${mailSelecting?'Cancel':'Select'}</button>
@@ -748,6 +757,7 @@ function inboxHTML(){
  const list=threads.map(item=>`<div class="mail-select-row ${mailSelecting?'mail-selection-mode':''} ${selectedThreads.has(item.key)?'mail-selected':''}"><input type="checkbox" data-select-mail="${esc(item.key)}" aria-label="Select ${esc(item.latest.subject)}" ${selectedThreads.has(item.key)?'checked':''}><button class="mail-row ${item===thread?'selected':''}" data-email="${esc(item.latest.id)}">
   <small>${esc(item.latest.from.split(' <')[0].replaceAll('"',''))} <time>${esc(fmt(item.latest.date))}</time></small>
   <strong>${esc(item.latest.subject)}</strong>
+  ${mailTypeLabel(item.latest)}
   ${item.taskIds.length?`<span class="mail-row-meta">${item.taskIds.length} linked</span>`:''}
  </button></div>`).join('');
  return `${e?`<button id="mail-back">${controlIcon('back')} Back to inbox</button>`:toolbar}${!e&&(mailSelecting||selectedCount)?`<div class="actions selection-bar mail-bulk-bar"><label><input type="checkbox" id="select-mail" ${threads.length&&threads.every(item=>selectedThreads.has(item.key))?'checked':''}> Select visible</label><span>${selectedCount} selected</span>${inboxFilter!=='Trash'?`<button id="bulk-email-archive" ${selectedCount?'':'disabled'}>${inboxFilter==='Archived'?'Unarchive':'Archive'}</button>`:''}<button id="bulk-mail-action" ${selectedCount?'':'disabled'}>${inboxFilter==='Trash'?'Restore selected':'Move selected to Trash'}</button></div>`:''}<div class="mail operator-inbox ${e?'mail-reader':'mail-index'}">
@@ -755,6 +765,7 @@ function inboxHTML(){
   ${e?`<section class="mail-body" data-reader="${esc(e.id)}" aria-label="Conversation"><header class="conversation-header">
    <span class="muted">${thread.messages.length} ${thread.messages.length===1?'message':'messages'}</span>
    <h2>${esc(e.subject)}</h2>
+   ${mailTypeLabel(e)}
    <div class="actions">
     <button class="primary" id="email-reply">${e.connectionId?'Reply':'Draft reply'}</button>
     ${inboxFilter==='Trash'?'':'<button id="email-task">Create task</button>'}<details class="mail-more"><summary>More</summary><div class="actions">${inboxFilter==='Trash'?'':'<button id="email-link">Link task</button><button id="email-link-operation">Link operation</button>'}
@@ -763,6 +774,10 @@ function inboxHTML(){
     ${inboxFilter==='Trash'?'':`<button id="email-archive">${inboxFilter==='Archived'?'Restore to inbox':'Archive in Inboxy'}</button>`}</div></details>
    </div>
   </header>
+  ${match?`<div class="mail-suggested-match">
+   <div><small>Exact reference match</small><strong>${esc([taskHeading(match),taskCustomer(match)].filter(Boolean).join(' · '))}</strong></div>
+   <button type="button" id="link-suggested-task">Link task</button>
+  </div>`:''}
   ${tasks.map((t,index)=>`<div class="actions"><button ${index===0?'id="open-linked"':''} data-open-linked="${esc(t.id)}">${esc(t.title)}</button><button data-unlink-task="${esc(t.id)}" aria-label="Unlink ${esc(t.title)}">Unlink</button></div>`).join('')}
   ${thread.shipmentIds.map(id=>`<span class="actions"><button data-email-operation="${esc(id)}">${esc(shipment(id)?.reference)}</button><button data-unlink-operation="${esc(id)}">Unlink operation</button></span>`).join('')}
   ${cutoff?`<div class="task-reply-callout"><span>Cutoff change · ${esc(cutoff.email.subject)}</span>${cutoffReviewButton(cutoff)}</div>`:''}
@@ -795,6 +810,13 @@ function bindInbox(){
   save();render();
  });
  bindEmailActions(thread,thread?emailUpdateCandidates(thread):[]);
+ $('#link-suggested-task')?.addEventListener('click',()=>{
+  const current=conversations().find(item=>item.key===thread.key);
+  const task=current&&!current.taskIds.length&&suggestedMailTask(current);
+  if(!task)return toast('The matching task has changed. Reopen the email.');
+  addMailLink(current.latest,task.id);
+  mailReading=false;captureEmailId='';mailActionDraft=null;save();render();toast('Conversation linked');
+ });
  $('#email-task')?.addEventListener('click',()=>startEmailTask(e));
  $('#email-reply')?.addEventListener('click',()=>draftReply(e.id));
  $('#email-archive')?.addEventListener('click',()=>{
@@ -1028,8 +1050,11 @@ function bindComposer(email){
 
   const draft=email?mailActionDraft:null;
   const confirmed={};
-  if(form.elements.applySuggestions?.checked)for(const element of form.querySelectorAll('[data-suggested-field]'))confirmed[element.dataset.suggestedField]=element.value;
-  const task=newTaskRecord({title,description:data.get('description').trim(),workflow:data.get('workflow'),owner:scope==='My next actions'?(myOwner()||'Unassigned'):owner==='All owners'?'Unassigned':owner,shipmentId:operationFilter,taskType:typeFilter,...confirmed});
+  if(form.elements.applySuggestions?.checked)for(const element of form.querySelectorAll('[data-suggested-field]')){
+   const key=element.dataset.suggestedField;
+   if(element.type!=='datetime-local'||form.elements.applySuggestedDates?.checked)confirmed[key]=element.value;
+  }
+  const task=newTaskRecord({title,description:data.get('description').trim(),workflow:data.get('workflow'),owner:scope==='My next actions'?(myOwner()||'Unassigned'):owner==='All owners'?'Unassigned':owner,shipmentId:email?'':operationFilter,taskType:typeFilter||suggestTaskType(title,state.taskTypes),...confirmed});
   if(email&&draft?.requestKey){
    if(state.tasks.some(item=>item.requestKey===draft.requestKey))return toast('This request already has a task.');
    task.requestKey=draft.requestKey;
@@ -1277,11 +1302,23 @@ function groupLabel(task){
  return {'By task type':task.taskType||'No type','By client':taskCustomer(task)||'No client',
   'By shipment':shipment(task.shipmentId)?.reference||'Standalone'}[groupBy]||'';
 }
+function exportTaskReport(){
+ const tasks=filtered().filter(task=>view!=='Do next'||task.status!=='Completed');
+ const selected=tasks.filter(task=>selectedTasks.has(task.id));
+ const report=selected.length?selected:tasks;
+ if(!report.length)return toast('No tasks to export.');
+ const threads=conversations();
+ const rows=[['Task','Customer','References','Type','Department','Owner','Status','Priority','Due','Cutoff','Follow-up','Next action','Linked email subject'],
+  ...report.map(task=>[taskHeading(task),taskCustomer(task),taskReferences(task).join(' · '),task.taskType,task.team,task.owner,
+   task.status,task.priority,task.due,task.cutoff,task.followUp,nextAction(task),
+   threads.find(thread=>thread.taskIds.includes(task.id)&&!thread.latest.deletedAt)?.latest.subject])];
+ download('inboxy-task-report.csv',taskReportCsv(rows),'text/csv;charset=utf-8');
+}
 function taskTable(list){
  const threads=conversations();
  const done=state.tasks.filter(t=>t.status==='Completed').length;
  const counts=scope==='Team overview'?`<div class="notice">${done} completed · ${state.tasks.length-done} pending · ${state.tasks.filter(t=>t.status!=='Completed'&&blockedBy(t,state.tasks).length).length} blocked · ${state.tasks.filter(t=>t.status!=='Completed'&&workQueues.Overdue(t,Date.now())).length} overdue · ${state.tasks.filter(t=>t.status!=='Completed'&&workQueues['Due within 24h'](t,Date.now())&&!workQueues.Overdue(t,Date.now())).length} upcoming<br>${TEAMS.map(name=>esc(name)+' '+state.tasks.filter(t=>t.team===name&&t.status!=='Completed').length).join(' · ')}</div>`:'';
- const bulk=`<div class="actions selection-bar"><label><input type="checkbox" id="select-tasks" ${list.length&&list.every(t=>selectedTasks.has(t.id))?'checked':''}> Select visible</label><span>${list.filter(t=>selectedTasks.has(t.id)).length} selected</span><select id="bulk-owner" aria-label="Assign selected tasks"><option value="">Assign selected…</option>${options(USERS,'')}</select><select id="bulk-status" aria-label="Change selected status"><option value="">Move selected…</option>${options(STATUSES,'')}</select><button class="danger" id="bulk-delete">Delete selected</button></div>`;
+ const bulk=`<div class="actions selection-bar"><label><input type="checkbox" id="select-tasks" ${list.length&&list.every(t=>selectedTasks.has(t.id))?'checked':''}> Select visible</label><span>${list.filter(t=>selectedTasks.has(t.id)).length} selected</span><select id="bulk-owner" aria-label="Assign selected tasks"><option value="">Assign selected…</option>${options(USERS,'')}</select><select id="bulk-status" aria-label="Change selected status"><option value="">Move selected…</option>${options(STATUSES,'')}</select><button id="export-task-report" type="button">Export CSV</button><button class="danger" id="bulk-delete">Delete selected</button></div>`;
  const groups=new Map();
  for(const task of list){const label=groupLabel(task);if(!groups.has(label))groups.set(label,[]);groups.get(label).push(task);}
  return counts+bulk+([...groups].map(([label,tasks])=>`${label?`<h3 class="task-group-label">${esc(label)} <small>${tasks.length}</small></h3>`:''}<div class="table-wrap"><table><thead><tr><th></th><th>Task / next action</th><th>Reference</th><th>Department / owner</th><th>Status</th><th>Deadline</th><th>Priority / follow-up</th></tr></thead><tbody>${tasks.map(t=>`<tr tabindex="0" data-task="${esc(t.id)}">
@@ -1298,6 +1335,7 @@ function taskTable(list){
 }
 function bindPlanning(){
  if(page!=='workspace')return;
+ $('#export-task-report')?.addEventListener('click',exportTaskReport);
  const change=(id,fn)=>$('#'+id)?.addEventListener('change',e=>{fn(e.target.value);selectedTasks.clear();render();});
  change('planning-scope',value=>{scope=value;view='List';});
  change('planning-group',value=>{groupBy=value;scope='All tasks';view='List';});
@@ -1497,9 +1535,31 @@ function addMailLink(message,id){
  message.taskIds=[...new Set([...taskLinks(message),id])];
  message.taskId??=id;
 }
+function mailTypeLabel(message){
+ const type=suggestTaskType(message.subject,state.taskTypes);
+ return type?`<span class="smart-label">${esc(type)}</span>`:'';
+}
+function suggestedMailTask(thread){
+ const {latest}=thread;
+ const subject=latest.subject||'';
+ const reference=mailSuggestions(latest,state).ourReference;
+ const matches=state.tasks.filter(task=>task.status!=='Completed'&&isBoardTask(task)&&
+  [...taskReferences(task),/^[A-Z]{2,8}[- ]?\d[A-Z0-9-]*$/i.test(task.title)?task.title:''].some(ref=>exactReferenceIn(subject,ref)||exactReferenceIn(reference,ref)));
+ return matches.length===1?matches[0]:null;
+}
 function startEmailTask(message,title,requestKey){
- const {requests:_,...suggested}=mailSuggestions(message,state);
- const taskType=suggestTaskType(title||message.subject,state.taskTypes);
+ const {requests,...suggested}=mailSuggestions(message,state);
+ if(!title&&requests.length===1)title=requests[0];
+ if(!suggested.shipmentId){
+  const matches=state.shipments.filter(item=>exactReferenceIn(message.subject,item.reference));
+  if(matches.length===1){
+   suggested.shipmentId=matches[0].id;
+   suggested.ourReference||=matches[0].reference;
+  }
+ }
+ const clientId=shipment(suggested.shipmentId)?.clientId;
+ if(clientId)suggested.clientId=clientId;
+ const taskType=suggestTaskType(title||message.subject,state.taskTypes)||(requests.length<2?suggestTaskType(message.subject,state.taskTypes):'');
  const teams={'AES filing':'Ops',Pickup:'Ops',Documentation:'Ops','Inventory report':'Warehouse','Cargo release':'Warehouse'};
  const department=TEAMS.includes(teams[taskType])?teams[taskType]:'';
  const assignees=state.groups.find(item=>item.name===department)?.members||[];
@@ -1511,7 +1571,8 @@ function composerSuggestions(draft){
   ['Our ref',draft.ourReference],['Customer ref',draft.customerReference],['Type',draft.taskType],['Department',draft.team],
   ['Owner',draft.owner],['Requested by',draft.due&&fmt(draft.due)],['Cutoff',draft.cutoff&&fmt(draft.cutoff)]];
  const text=values.filter(([,value])=>value).map(([label,value])=>label+' · '+value).join('  |  ');
- return text?`<label class="check-row"><input type="checkbox" name="applySuggestions"> Use suggestions</label><small>${esc(text)}</small>
+ return text?`<label class="check-row"><input type="checkbox" name="applySuggestions" checked> Use suggestions</label><small>${esc(text)}</small>
+ ${draft.due||draft.cutoff?`<label class="check-row"><input type="checkbox" name="applySuggestedDates"> Include suggested dates</label>`:''}
  <details class="quick-more"><summary>Correct suggestions</summary><div class="task-properties">
  ${values.map(([label],index)=>{
   const key=['clientId','shipmentId','ourReference','customerReference','taskType','team','owner','due','cutoff'][index];

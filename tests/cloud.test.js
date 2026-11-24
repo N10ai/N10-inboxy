@@ -238,7 +238,8 @@ test('Gmail conversation supports independent actions, review, assignment, compl
   click('[data-page="inbox"]');click('[data-email="mail-a"]');
   for(const index of [0,1]){
    click('[data-new-request="'+index+'"]');
-   click('[name="applySuggestions"]');
+   assert.equal(doc.querySelector('[name="applySuggestions"]').checked,true);
+   click('[name="applySuggestedDates"]');
    if(index===0)doc.querySelector('#inline-capture [name=title]').value='Book confirmed pickup';
    submit('#inline-capture');click('[data-close]');
   }
@@ -659,5 +660,43 @@ test('linked email subject sits between the task title and customer and opens th
   assert.equal(listSubject.nextElementSibling.textContent,'Coastal');
   listSubject.click();
   assert.equal(doc.querySelector('[data-reader]').dataset.reader,email.id);
+ }finally{dom.window.close();}
+});
+
+test('Inbox labels recognizable work and only offers a direct link for a unique task reference',async()=>{
+ const base={customer:'Coastal',team:'Ops',owner:'Unassigned',status:'Up next',priority:'Normal',dependencies:[],notes:[],activity:[]};
+ const mail={id:'pickup-email',subject:'Pickup instructions for PU-123',from:'Dispatch <dispatch@example.invalid>',body:'Use dock 3.',date:'2020-01-01T09:00:00Z'};
+ const {dom,w,snapshot}=await app(true,{tasks:[{...base,id:'pickup',title:'PU-123'},{...base,id:'other',title:'PU-1234'}],emails:[mail]});
+ try{
+  const doc=w.document;
+  doc.querySelector('[data-page="inbox"]').click();
+  assert.equal(doc.querySelector('.mail-row .smart-label').textContent,'Pickup');
+  doc.querySelector('[data-email]').click();
+  assert.match(doc.querySelector('.mail-suggested-match strong').textContent,/PU-123 · Coastal/);
+  doc.querySelector('#link-suggested-task').click();
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.emails[0].taskId,'pickup');
+  assert.equal(snapshot.tasks.length,2);
+  assert.equal(doc.querySelector('[data-email]'),null);
+ }finally{dom.window.close();}
+});
+
+test('task report downloads selected visible tasks with Excel-safe CSV cells',async()=>{
+ const base={team:'Ops',owner:'Unassigned',status:'Up next',priority:'Normal',dependencies:[],notes:[],activity:[]};
+ const {dom,w}=await app(true,{tasks:[{...base,id:'pick',title:'=1+1',customer:'Café, Inc.'},{...base,id:'other',title:'Other task'}]});
+ try{
+  const doc=w.document;
+  let report,filename;
+  w.URL.createObjectURL=blob=>{report=blob;return 'blob:task-report';};
+  w.URL.revokeObjectURL=()=>{};
+  w.HTMLAnchorElement.prototype.click=function(){filename=this.download;};
+  doc.querySelector('[data-view="List"]').click();
+  doc.querySelector('[data-select-task="pick"]').click();
+  doc.querySelector('#export-task-report').click();
+  const csv=await new Promise(resolve=>{const reader=new w.FileReader();reader.onload=()=>resolve(reader.result);reader.readAsText(report);});
+  assert.equal(filename,'inboxy-task-report.csv');
+  assert.match(csv,/"Task","Customer"/);
+  assert.match(csv,/"'=1\+1","Café, Inc\."/);
+  assert.doesNotMatch(csv,/Other task/);
  }finally{dom.window.close();}
 });
