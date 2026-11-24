@@ -1135,13 +1135,13 @@ button { border-color: #fff7; }
 
 /* Glass materials. Keep reading surfaces denser than the floating navigation. */
 :root {
- --glass-ink: #29252c;
- --glass-muted: #59525d;
- --glass-edge: #61536735;
+ --glass-ink: #26211e;
+ --glass-muted: #62544b;
+ --glass-edge: #67473538;
  --glass-rim: #ffffffdf;
- --glass-chrome: linear-gradient(150deg,#fff8,#f5e7df60 52%,#b58e7960);
- --glass-panel: linear-gradient(145deg,#fff6,#fff3 52%,#eee0d560);
- --glass-paper: linear-gradient(150deg,#fffaf4dc,#fff9 58%,#faede4bc);
+ --glass-chrome: linear-gradient(155deg,#fff9,#fff3 55%,#a8765c26);
+ --glass-panel: linear-gradient(145deg,#fff7,#fff2 52%,#ecd0b752);
+ --glass-paper: linear-gradient(150deg,#fffdf7ed,#fff9 62%,#f7e7d8bf);
  --glass-light: inset 0 1px 0 var(--glass-rim),inset 0 -1px 0 #6c537714;
  --glass-float: 0 14px 40px #3023371c,0 2px 8px #30233710,var(--glass-light);
  --glass-card: 0 5px 15px #30233713,var(--glass-light);
@@ -1149,16 +1149,18 @@ button { border-color: #fff7; }
  --control-muted: var(--glass-muted);
  --control-line: #67576d46;
  --control-surface: #fffdfbda;
- --control-focus: #815043;
+ --control-focus: #a13b25;
+ --workspace-accent: #b9341b;
+ --workspace-accent-wash: #ffe8de;
  color: var(--glass-ink);
- background: #ded4dd;
+ background: #dfc5af;
 }
 body {
  background:
-  radial-gradient(ellipse at 18% 0%,#fff5e8 0%,transparent 49%),
-  radial-gradient(ellipse at 82% 32%,#f8e8d8 0%,transparent 51%),
-  radial-gradient(ellipse at 67% 110%,#a77458 0%,transparent 59%),
-  linear-gradient(128deg,#bfa89e,#c6aa97 46%,#d9bda8);
+  radial-gradient(ellipse at 8% 0%,#fff7e9 0%,transparent 48%),
+  radial-gradient(ellipse at 94% 6%,#fbe2c3 0%,transparent 53%),
+  radial-gradient(ellipse at 77% 109%,#a8765c 0%,transparent 55%),
+  linear-gradient(125deg,#ceb9a8,#dfc5af 53%,#bc9b84);
  background-attachment: fixed;
 }
 body::before { background: none; }
@@ -1214,7 +1216,7 @@ body::before { background: none; }
 #app :is(.heading .muted,.board-guidance,.bottom-note,.operation-card .ref,.operation-card .customer,.card-move>span,.drag-handle,.card-owner,.group-tile>p,.person-row small,.directory-intro p,td,.mail-body pre,.mail-row small) {
  color: var(--glass-muted);
 }
-#app .next-action { background: #e0d5e153; border-color: #76617d32; }
+#app .next-action { background: #fff8; border-color: var(--glass-edge); }
 #app .next-action>strong { color: var(--glass-ink); }
 #app .next-action>span { color: var(--glass-muted); }
 #app .operation-card .card-bottom { border-color: var(--glass-edge); }
@@ -1236,10 +1238,10 @@ body::before { background: none; }
 }
 #app .heading .actions>button { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; }
 #app button.primary,#app .heading .actions>button.primary,#detail button.primary {
- background: linear-gradient(160deg,#514954,#2e2933 65%,#24212a);
- color: #fffbff;
- border-color: #2b2333;
- box-shadow: inset 0 1px 0 #ffffff39,0 3px 8px #2d233c35;
+ background: linear-gradient(160deg,#c44124,#a0301b);
+ color: #fff;
+ border-color: #962b16;
+ box-shadow: inset 0 1px 0 #ffffff39,0 3px 8px #762b2535;
 }
 #app :is(.sidebar .nav,.glass-dock) button { color: var(--glass-ink); }
 #app :is(.sidebar .nav,.glass-dock) button:hover { background: #fff8; color: var(--glass-ink); }
@@ -1270,7 +1272,7 @@ body::before { background: none; }
  border-color: var(--glass-edge);
 }
 #detail::backdrop { background: #30273751; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-#detail .task-action-brief { background: linear-gradient(130deg,#f5ece7,#efe4efb8); border-left-color: #9b6455; box-shadow: var(--glass-light); }
+#detail .task-action-brief { background: linear-gradient(130deg,#fff8f1,#ffe8debc); border-left-color: var(--workspace-accent); box-shadow: var(--glass-light); }
 #detail .checklist-item[aria-current="step"] { background: #e9dfed9c; box-shadow: var(--glass-light); }
 #detail .checklist-next-label { color: #604366; }
 #app :is(button,input,select,textarea):focus-visible,#detail :is(button,input,select,textarea,summary):focus-visible {
@@ -1281,7 +1283,7 @@ body::before { background: none; }
  #app :is(.heading .actions>button,#workspace-filter-toggle):not(:disabled):hover,
  #detail :is(.dialog-footer button,[data-close],.task-shortcut,.shortcut-actions button):not(:disabled):hover { border-color: #75617d; }
  #app button.primary:not(:disabled):hover,#app .heading .actions>button.primary:not(:disabled):hover,#detail button.primary:not(:disabled):hover {
-  background: linear-gradient(158deg,#62556b,#352d3e);
+  background: linear-gradient(158deg,#ae371e,#8c2917);
  }
 }
 @media(max-width:760px) {
@@ -1297,7 +1299,7 @@ body::before { background: none; }
  #app *,#detail * { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
 @media (prefers-reduced-transparency: reduce) {
- :root { --glass-chrome: #f4edf5; --glass-panel: #f6eff4; --glass-paper: #fffcfc; --control-surface: #fffdfb; }
+ :root { --glass-chrome: #f7eee6; --glass-panel: #faf3ec; --glass-paper: #fffcf8; --control-surface: #fffdfb; }
  #app :is(.topbar,.sidebar,.glass-dock,.main,.panel,.group-tile,.mail,.table-wrap,.auth-card),
  #detail,#detail::backdrop { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
@@ -1373,3 +1375,46 @@ body::before { background: none; }
 }
 .mail-suggested-match small,.mail-suggested-match strong {display:block}
 .mail-suggested-match small {color:var(--control-muted);margin-bottom:.2rem}
+
+/* Workspace hierarchy and surfaces */
+#app .heading h1 {font-size:clamp(1.55rem,2.8vw,2.45rem);line-height:1.1;letter-spacing:-.045em;font-weight:740;margin:0}
+#app .heading .actions {flex-wrap:wrap}
+#app .main {border-radius:24px}
+#app .topbar .search {border-radius:12px;background:#fff9;box-shadow:inset 0 1px 2px #5736220d}
+#app .segments {padding:3px;gap:2px;background:#62432b12}
+#app .segments button.active {color:#7c311f}
+#app .sidebar .nav :is(button.active,[data-team].active) {background:#fff9;color:#7c311f;box-shadow:inset 3px 0 0 var(--workspace-accent),var(--glass-light)}
+#app .glass-dock button.active {background:var(--workspace-accent-wash);color:#7c311f}
+#app .column:not(.drop-over) {background:linear-gradient(145deg,#fff6,#94614219)}
+#app .column-head {font-size:.8rem;letter-spacing:0;font-weight:700}
+#app .column-head .number {color:var(--glass-muted);background:#fff7;font-variant-numeric:tabular-nums}
+#app .operation-card {border-radius:14px;border-top-color:#ad9480}
+#app .operation-card.priority-high {border-top-color:#b17659}
+#app .operation-card.priority-urgent {border-top-color:var(--workspace-accent)}
+#app .operation-card.is-complete {border-top-color:#5b886d}
+#app .operation-card h3 {font-size:1rem;line-height:1.28;letter-spacing:-.025em;overflow-wrap:anywhere}
+#app .operation-card .customer {font-size:.74rem}
+#app .card-move {background:#fff4;border-color:var(--glass-edge)}
+#app .card-signals {color:var(--glass-muted);font-variant-numeric:tabular-nums}
+#app .operator-inbox.mail-index .mail-select-row {box-shadow:var(--glass-light)}
+#app .operator-inbox.mail-index .mail-row:hover {background:#fff7}
+#app .conversation-header h2 {font-size:clamp(1.25rem,2.2vw,1.85rem);line-height:1.2;letter-spacing:-.035em;overflow-wrap:anywhere}
+#app .mail-suggested-match {border-inline-start:3px solid var(--workspace-accent);background:#fff6f0a8}
+#app .smart-label {background:#fff6ee;border-color:#a963433f;color:#793d29}
+#app .table-wrap thead th {background:#fbefe4}
+#app .today-row {border-color:var(--glass-edge)}
+#detail .dialog-head h2 {font-size:1.2rem;letter-spacing:-.025em}
+#detail .task-wait-summary {background:#fff9}
+#detail .checklist-item[aria-current="step"] {background:var(--workspace-accent-wash)}
+#detail .checklist-next-label {color:#7c311f}
+#app :is(button,input,select,textarea):focus-visible,#detail :is(button,input,select,textarea,summary):focus-visible {outline-color:var(--control-focus)}
+@media (max-width:600px) {
+ #app .main {border-radius:18px}
+ #app .heading .actions>button {min-height:40px}
+ #app .operation-card h3 {font-size:1.02rem}
+ #app .conversation-header .actions {gap:.35rem;flex-wrap:wrap}
+}
+@media (prefers-reduced-transparency: reduce) {
+ #app .column:not(.drop-over),#app .topbar .search,#app .operator-inbox.mail-index .mail-row:hover {background:#fffaf4}
+ #app .mail-suggested-match,#detail .task-wait-summary {background:#fff6f0}
+}
