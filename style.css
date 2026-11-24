@@ -1360,3 +1360,16 @@ body::before { background: none; }
 @media (pointer:coarse) {
  #app .task-email-subject,#detail .task-email-subject { min-height:34px }
 }
+
+.smart-label {
+ display:inline-block;width:fit-content;margin:.3rem .35rem .1rem 0;padding:.18rem .52rem;
+ border:1px solid var(--glass-edge);border-radius:999px;background:#fff9;color:#68483e;
+ font-size:.72rem;font-weight:650
+}
+.mail-suggested-match {
+ display:flex;align-items:center;justify-content:space-between;gap:.7rem;flex-wrap:wrap;
+ margin:.65rem 0;padding:.7rem .8rem;border:1px solid var(--glass-edge);
+ border-radius:12px;background:var(--glass-panel)
+}
+.mail-suggested-match small,.mail-suggested-match strong {display:block}
+.mail-suggested-match small {color:var(--control-muted);margin-bottom:.2rem}
