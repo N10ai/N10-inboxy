@@ -165,8 +165,10 @@ function updateGroupName(group,name){
 }
 function render(){
 const currentComposer=$('#inline-capture');
+const selectedGroup=currentComposer?.elements.group.selectedOptions[0];
 const captureDraft=currentComposer&&{
  context:currentComposer.dataset.context,
+ group:!currentComposer.hidden&&!selectedGroup?.defaultSelected?selectedGroup?.value:undefined,
  title:currentComposer.elements.title.value,
  workflow:currentComposer.elements.workflow.value,
  customer:currentComposer.elements.customerChoice.value,
@@ -201,6 +203,7 @@ $('#app').innerHTML=`<div class="shell"><header class="topbar"><div class="glass
  const composer=$('#inline-capture');
  if(composer&&captureDraft?.context===composer.dataset.context){
   composer.elements.title.value=captureDraft.title;
+  if(TEAMS.includes(captureDraft.group))composer.elements.group.value=captureDraft.group;
   composer.elements.description.value=captureDraft.description;
   composer.querySelector('.capture-extras').open=captureDraft.detailsOpen;
   if(composer.elements.applySuggestions){
@@ -1012,9 +1015,12 @@ function addWorkflowSteps(parent, steps) {
 }
 function newTaskRecord(data){return {id:uid(),title:data.title.trim(),clientId:data.clientId||'',taskType:data.taskType||'',cutoff:data.cutoff||'',consequence:data.consequence||'',customer:data.customer?.trim()||'',ourReference:data.ourReference?.trim()||'',customerReference:data.customerReference?.trim()||'',workflow:data.workflow||'',ftzReference:data.ftzReference?.trim()||'',team:data.team|| (team==='All teams'?TEAMS[0]:team),owner:data.owner||'Unassigned',status:data.status||'Up next',priority:data.priority||'Normal',due:data.due||'',followUp:data.followUp||'',nextAction:data.nextAction||'',description:data.description||'',shipmentId:data.shipmentId||'',parentId:data.parentId||null,dependencies:[],notes:[],activity:[{text:'Task created',date:new Date().toISOString()}],public:false,publicTitle:'',impact:false,boardOrder:state.tasks.filter(t=>t.status===(data.status||'Up next')).length};}
 function composerHTML(email){
+ const suggestedGroup=email?mailActionDraft?.team:'';
+ const group=TEAMS.includes(suggestedGroup)?suggestedGroup:TEAMS.includes(team)?team:TEAMS[0];
  return `<form id="inline-capture" class="inline-capture" data-context="${esc(email?.id||'workspace')}" ${email||captureOpen?'':'hidden'}>
   <div class="capture-row">
    <input name="title" aria-label="New task title" maxlength="180" required placeholder="Shipment ref or task title" value="${esc((email?(mailActionDraft?.title||email.subject):'').slice(0,180))}">
+   <label class="capture-group"><span>Group</span><select name="group" ${TEAMS.length?'':'disabled'}>${TEAMS.length?options(TEAMS,group):'<option>No groups</option>'}</select></label>
    <div class="capture-submit-group">
     ${email?'':'<button id="cancel-task-capture" type="button">Cancel</button>'}
     <button class="primary capture-submit" type="submit">Add task</button>
@@ -1054,7 +1060,9 @@ function bindComposer(email){
    const key=element.dataset.suggestedField;
    if(element.type!=='datetime-local'||form.elements.applySuggestedDates?.checked)confirmed[key]=element.value;
   }
-  const task=newTaskRecord({title,description:data.get('description').trim(),workflow:data.get('workflow'),owner:scope==='My next actions'?(myOwner()||'Unassigned'):owner==='All owners'?'Unassigned':owner,shipmentId:email?'':operationFilter,taskType:typeFilter||suggestTaskType(title,state.taskTypes),...confirmed});
+  const group=data.get('group');
+  if(group!==draft?.team&&confirmed.owner===draft?.owner)delete confirmed.owner;
+  const task=newTaskRecord({title,team:group,description:data.get('description').trim(),workflow:data.get('workflow'),owner:scope==='My next actions'?(myOwner()||'Unassigned'):owner==='All owners'?'Unassigned':owner,shipmentId:email?'':operationFilter,taskType:typeFilter||suggestTaskType(title,state.taskTypes),...confirmed});
   if(email&&draft?.requestKey){
    if(state.tasks.some(item=>item.requestKey===draft.requestKey))return toast('This request already has a task.');
    task.requestKey=draft.requestKey;
@@ -1067,7 +1075,7 @@ function bindComposer(email){
   save();render();
   if(email)taskDetail(task.id);
   else $('#new-task')?.focus();
-  toast('Task added');
+  toast(task.team?'Task added to '+task.team:'Task added');
  };
 }
 function taskProperties(task,timing='',step,threads=[]){
@@ -1568,16 +1576,16 @@ function startEmailTask(message,title,requestKey){
 }
 function composerSuggestions(draft){
  const values=[['Client',state.clients.find(c=>c.id===draft.clientId)?.name],['Operation',shipment(draft.shipmentId)?.reference],
-  ['Our ref',draft.ourReference],['Customer ref',draft.customerReference],['Type',draft.taskType],['Department',draft.team],
+  ['Our ref',draft.ourReference],['Customer ref',draft.customerReference],['Type',draft.taskType],
   ['Owner',draft.owner],['Requested by',draft.due&&fmt(draft.due)],['Cutoff',draft.cutoff&&fmt(draft.cutoff)]];
  const text=values.filter(([,value])=>value).map(([label,value])=>label+' · '+value).join('  |  ');
  return text?`<label class="check-row"><input type="checkbox" name="applySuggestions" checked> Use suggestions</label><small>${esc(text)}</small>
  ${draft.due||draft.cutoff?`<label class="check-row"><input type="checkbox" name="applySuggestedDates"> Include suggested dates</label>`:''}
  <details class="quick-more"><summary>Correct suggestions</summary><div class="task-properties">
  ${values.map(([label],index)=>{
-  const key=['clientId','shipmentId','ourReference','customerReference','taskType','team','owner','due','cutoff'][index];
+  const key=['clientId','shipmentId','ourReference','customerReference','taskType','owner','due','cutoff'][index];
   const choices={clientId:clientOptions(draft.clientId),shipmentId:operationOptions(draft.shipmentId),
-   taskType:options(['',...state.taskTypes],draft.taskType),team:options(['',...TEAMS],draft.team||''),owner:options(USERS,draft.owner||'Unassigned')}[key];
+   taskType:options(['',...state.taskTypes],draft.taskType),owner:options(USERS,draft.owner||'Unassigned')}[key];
   const control=choices?`<select data-suggested-field="${key}">${choices}</select>`:
    `<input data-suggested-field="${key}" type="${['due','cutoff'].includes(key)?'datetime-local':'text'}" maxlength="120" value="${esc(draft[key])}">`;
   return `<label class="field">${label}${control}</label>`;

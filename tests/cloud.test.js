@@ -230,6 +230,7 @@ test('Gmail conversation supports independent actions, review, assignment, compl
  const unrelated={...initial,id:'mail-b',threadId:'thread-b',subject:'Thanks',body:'Thanks, received.'};
  const update={...initial,id:'mail-c',threadId:'thread-c',subject:'Shipment: OPS-7',body:'Please reschedule pickup.\nCutoff: 2026-11-18 18:00'};
  const {dom,w,snapshot}=await app(true,{emails:[initial,unrelated,update],shipments:[operation],
+  groups:['Ops','Warehouse'].map(name=>({id:name.toLowerCase(),name,members:[]})),
   people:[{id:'operator',name:'Operator',email:'operator@example.invalid',role:'Admin'}]});
  try{
   const doc=w.document;
@@ -240,7 +241,12 @@ test('Gmail conversation supports independent actions, review, assignment, compl
    click('[data-new-request="'+index+'"]');
    assert.equal(doc.querySelector('[name="applySuggestions"]').checked,true);
    click('[name="applySuggestedDates"]');
-   if(index===0)doc.querySelector('#inline-capture [name=title]').value='Book confirmed pickup';
+   if(index===0){
+    const form=doc.querySelector('#inline-capture');
+    assert.equal(form.elements.group.value,'Ops');
+    form.elements.title.value='Book confirmed pickup';
+    form.elements.group.value='Warehouse';
+   }
    submit('#inline-capture');click('[data-close]');
   }
   click('#mail-back');click('[data-email="mail-c"]');click('[data-review-request="0"]');
@@ -260,6 +266,7 @@ test('Gmail conversation supports independent actions, review, assignment, compl
   click('#bulk-mail-action');const folder=doc.querySelector('#mail-folder');folder.value='Trash';folder.dispatchEvent(new w.Event('change'));
   assert.equal(doc.querySelectorAll('.mail-row').length,2);
   await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks.find(task=>task.title==='Book confirmed pickup').team,'Warehouse');
   assert.equal(snapshot.tasks.length,2);
   assert.equal(snapshot.tasks.find(t=>t.id===first).owner,'Operator');
   assert.equal(snapshot.tasks.find(t=>t.id===first).status,'Completed');
@@ -535,22 +542,31 @@ test('desktop-style selection archives without entering selection mode and task 
 });
 
 test('task capture has one entry point and keeps optional fields collapsed',async()=>{
- const {dom,w}=await app(true);
+ const groups=['Ops','Warehouse'].map(name=>({id:name.toLowerCase(),name,members:[]}));
+ const {dom,w,snapshot}=await app(true,{groups});
  try{
   const doc=w.document;
   assert.equal(doc.querySelectorAll('[data-add-status],[data-quick-status],#quick-add,#dock-add').length,0);
   assert.equal(doc.querySelector('#inline-capture').hidden,true);
   doc.querySelector('#new-task').click();
-  const form=doc.querySelector('#inline-capture');
+  let form=doc.querySelector('#inline-capture');
   assert.equal(form.hidden,false);
   assert.equal(form.querySelector('.capture-extras').open,false);
   assert.equal(doc.querySelector('#new-task'),null);
   assert.equal(doc.activeElement,form.elements.title);
+  assert.equal(form.elements.group.value,'Ops');
   form.elements.title.value='PU 200';
+  form.elements.group.value='Warehouse';
+  doc.querySelector('[data-view="Groups"]').click();
+  form=doc.querySelector('#inline-capture');
+  assert.equal(form.elements.group.value,'Warehouse');
   form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
   assert.equal(doc.querySelector('#inline-capture').hidden,true);
   assert.equal(doc.activeElement.id,'new-task');
+  doc.querySelector('[data-team="Warehouse"]').click();
   doc.querySelector('.card-open').click();
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.tasks[0].team,'Warehouse');
   assert.ok(doc.querySelector('.task-tools'));
   assert.equal(doc.querySelector('#checklist-add-editor').hidden,true);
   doc.querySelector('#show-checklist-add').click();

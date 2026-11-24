@@ -907,7 +907,13 @@ button { border-color: #fff7; }
  background: #fff9; box-shadow: 0 4px 14px #3333330a;
 }
 #app .inline-capture[hidden] { display:none }
-#app .capture-row { grid-template-columns: minmax(0,1fr) auto; align-items:center }
+#app .capture-row { grid-template-columns: minmax(0,1fr) minmax(7rem,10rem) auto; align-items:end }
+.capture-group { display:grid; gap:.2rem; min-width:0; color:var(--control-muted); font-size:.75rem; font-weight:600 }
+#app .capture-group select { width:100%; min-width:0 }
+@media (max-width:640px) {
+ #app .capture-row { grid-template-columns:minmax(0,1fr) auto }
+ #app .capture-row > input { grid-column:1 / -1 }
+}
 #app .capture-row > input { width:100% }
 .capture-submit-group { display:flex; gap:.35rem; align-items:center }
 .capture-extras { margin-top:.5rem }
