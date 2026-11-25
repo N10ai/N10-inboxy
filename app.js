@@ -254,7 +254,13 @@ function linkedEmailSubject(task,threads){
   ${controlIcon('mail')}<span>${esc(subject)}</span>
  </button>`;
 }
-function card(t,{draggable=true}={}){const parent=handoffParent(t),blocks=blockedBy(t,state.tasks),children=state.tasks.filter(x=>x.parentId===t.id),threads=conversations();return `<article class="card operation-card priority-${t.priority.toLowerCase()} ${blocks.length?'has-blockers':''} ${t.status==='Completed'?'is-complete':''}" draggable="${draggable}" tabindex="0" role="group" data-task="${t.id}" aria-label="${esc(taskHeading(t))}"><div class="card-context"><span class="ref">${esc(taskReferences(t).find(ref=>ref!==taskHeading(t))||t.workflow||'GENERAL REQUEST')}</span>${draggable?`<button class="drag-handle" data-drag="${t.id}" aria-label="Drag ${esc(taskHeading(t))}" title="Drag to move or reorder" draggable="false">${controlIcon('grip')}</button>`:''}</div><button class="card-open"><h3>${esc(taskHeading(t))}</h3></button>${linkedEmailSubject(t,threads)}<div class="customer">${taskCustomer(t)?esc(taskCustomer(t))+' · ':''}<button class="group-chip" data-quick-edit="${esc(t.id)}" data-field="team">${esc(t.team)}</button>${parent?' · Handoff':''}</div>${parent?`<p class="handoff-work">${esc(t.title)}</p>`:t.description?`<p class="handoff-work board-description">${esc(t.description)}</p>`:''}<button class="next-action" data-field="nextAction" data-quick-edit="${t.id}"><span>NEXT</span><strong>${esc(nextAction(t)||'Add next action')}</strong><span>${controlIcon('arrow')}</span></button>${blocks.length?`<div class="blocked-line">${controlIcon('branch')} Waiting on ${esc(blocks[0].title)}${blocks.length>1?' +'+(blocks.length-1):''}</div>`:''}<div class="card-signals"><span class="badge ${t.priority}">${esc(t.priority)}${t.priorityOverride?' · Manual':''}</span>${deadline(t)&&dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'<span class="overdue-pill">Overdue</span>':''}${children.length?`<span>${controlIcon('checklist')} ${children.filter(c=>c.status==='Completed').length}/${children.length}</span>`:''}${t.followUp?`<span title="Follow-up">${controlIcon('timer')} ${esc(fmt(t.followUp))}</span>`:''}</div><div class="card-bottom"><button class="card-owner" data-field="owner" data-quick-edit="${t.id}"><span class="avatar">${esc(initials(t.owner))}</span>${esc(t.owner)}</button><button class="card-due ${dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'overdue':''}" data-field="${t.cutoff?'cutoff':'due'}" data-quick-edit="${t.id}">${t.cutoff?'Cutoff · '+esc(fmt(t.cutoff)):t.due?esc(fmt(t.due)):'＋ Due date'}</button></div><label class="card-move"><span>Move to</span><select data-move="${t.id}" aria-label="Move ${esc(taskHeading(t))} to status">${options(STATUSES,t.status)}</select></label></article>`;}
+function taskCreatedLabel(task){
+ const date=task.createdAt||task.activity?.find(entry=>entry.text==='Task created')?.date;
+ if(!date||!Number.isFinite(Date.parse(date)))return '';
+ const label=new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(date));
+ return `<time class="task-created" datetime="${esc(date)}" title="${esc(fmt(date))}">Created ${esc(label)}</time>`;
+}
+function card(t,{draggable=true}={}){const parent=handoffParent(t),blocks=blockedBy(t,state.tasks),children=state.tasks.filter(x=>x.parentId===t.id),threads=conversations();return `<article class="card operation-card priority-${t.priority.toLowerCase()} ${blocks.length?'has-blockers':''} ${t.status==='Completed'?'is-complete':''}" draggable="${draggable}" tabindex="0" role="group" data-task="${t.id}" aria-label="${esc(taskHeading(t))}"><div class="card-context"><span class="ref">${esc(taskReferences(t).find(ref=>ref!==taskHeading(t))||t.workflow||'GENERAL REQUEST')}</span>${draggable?`<button class="drag-handle" data-drag="${t.id}" aria-label="Drag ${esc(taskHeading(t))}" title="Drag to move or reorder" draggable="false">${controlIcon('grip')}</button>`:''}</div><button class="card-open"><h3>${esc(taskHeading(t))}</h3></button>${linkedEmailSubject(t,threads)}<div class="customer">${taskCustomer(t)?esc(taskCustomer(t))+' · ':''}<button class="group-chip" data-quick-edit="${esc(t.id)}" data-field="team">${esc(t.team)}</button>${parent?' · Handoff':''}</div>${taskCreatedLabel(t)}${parent?`<p class="handoff-work">${esc(t.title)}</p>`:t.description?`<p class="handoff-work board-description">${esc(t.description)}</p>`:''}<button class="next-action" data-field="nextAction" data-quick-edit="${t.id}"><span>NEXT</span><strong>${esc(nextAction(t)||'Add next action')}</strong><span>${controlIcon('arrow')}</span></button>${blocks.length?`<div class="blocked-line">${controlIcon('branch')} Waiting on ${esc(blocks[0].title)}${blocks.length>1?' +'+(blocks.length-1):''}</div>`:''}<div class="card-signals"><span class="badge ${t.priority}">${esc(t.priority)}${t.priorityOverride?' · Manual':''}</span>${deadline(t)&&dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'<span class="overdue-pill">Overdue</span>':''}${children.length?`<span>${controlIcon('checklist')} ${children.filter(c=>c.status==='Completed').length}/${children.length}</span>`:''}${t.followUp?`<span title="Follow-up">${controlIcon('timer')} ${esc(fmt(t.followUp))}</span>`:''}</div><div class="card-bottom"><button class="card-owner" data-field="owner" data-quick-edit="${t.id}"><span class="avatar">${esc(initials(t.owner))}</span>${esc(t.owner)}</button><button class="card-due ${dueTime(deadline(t))<Date.now()&&t.status!=='Completed'?'overdue':''}" data-field="${t.cutoff?'cutoff':'due'}" data-quick-edit="${t.id}">${t.cutoff?'Cutoff · '+esc(fmt(t.cutoff)):t.due?esc(fmt(t.due)):'＋ Due date'}</button></div><label class="card-move"><span>Move to</span><select data-move="${t.id}" aria-label="Move ${esc(taskHeading(t))} to status">${options(STATUSES,t.status)}</select></label></article>`;}
 function groupBoard(list){
  const columns=state.groups.filter(group=>team==='All teams'||group.name===team);
  const known=new Set(columns.map(group=>group.name));
@@ -422,7 +428,8 @@ ${t.status==='Waiting'?`<div class="task-wait-summary"><strong>Waiting on ${esc(
  ${t.waitingFor?`<span>${esc(t.waitingFor)}</span>`:''}
  <small>${t.followUp?'Follow up '+esc(fmt(t.followUp)):'No follow-up set'}</small>
  <div class="actions">${waitingActions(t,threads)}<button id="resume-wait">Resume work</button></div></div>`:
- t.status!=='Completed'?`<button data-edit-wait="${esc(t.id)}">Waiting on…</button>`:''}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="shipment-blockers"><strong>Blocked by</strong>${blocks.map(b=>`<button type="button" data-open-blocker="${esc(b.id)}">${esc(taskHeading(b))} ${controlIcon('arrow')}</button>`).join('')}</div>`:''}</div><div class="work-steps"><details class="quick-more task-checklist" open><summary>Checklist${children.length?' · '+done+'/'+children.length:''}</summary>${children.length?`<progress class="shipment-progress" aria-label="Checklist completion" max="${children.length}" value="${done}"></progress>`:''}<div class="section-title checklist-add-area"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<button id="show-checklist-add" type="button" aria-controls="checklist-add-editor" aria-expanded="false">${controlIcon('plus')} Add step</button><div id="checklist-add-editor" hidden><form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Assign this step</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label><label class="field">Member<select name="step-owner" form="inline-subtask"><option value="">Default assignment</option>${options(USERS,'')}</select></label></details></div>`}</div>${shipmentChecklist(children,next)}</details></div></div><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Customer update</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`,true);
+ t.status!=='Completed'?`<button data-edit-wait="${esc(t.id)}">Waiting on…</button>`:''}${t.parentId?`<p><button class="linkbutton" id="parent-task">↑ Open parent task</button></p>`:''}${blocks.length?`<div class="shipment-blockers"><strong>Blocked by</strong>${blocks.map(b=>`<button type="button" data-open-blocker="${esc(b.id)}">${esc(taskHeading(b))} ${controlIcon('arrow')}</button>`).join('')}</div>`:''}</div><div class="work-steps"><details class="quick-more task-checklist" open><summary>Checklist${children.length?' · '+done+'/'+children.length:''}</summary>${children.length?`<progress class="shipment-progress" aria-label="Checklist completion" max="${children.length}" value="${done}"></progress>`:''}<div class="section-title checklist-add-area"><h3 class="visually-hidden">Add to checklist</h3>${t.status==='Completed'?'':`<button id="show-checklist-add" type="button" aria-controls="checklist-add-editor" aria-expanded="false">${controlIcon('plus')} Add step</button><div id="checklist-add-editor" hidden><form id="inline-subtask" class="inline-form"><input name="title" required maxlength="180" aria-label="New subtask" placeholder="Add a step…"><button>Add</button></form><details class="step-handoff"><summary>Assign this step</summary><label class="field">Group<select name="step-team" form="inline-subtask"><option value="">Keep in this checklist</option>${options(TEAMS.filter(name=>name!==t.team),'')}</select></label><label class="field">Member<select name="step-owner" form="inline-subtask"><option value="">Default assignment</option>${options(USERS,'')}</select></label></details></div>`}</div>${shipmentChecklist(children,next)}</details></div></div><details class="quick-more task-thread"><summary>Linked email ${emails.length?' · '+emails.length:''}</summary><div class="section-title"><h3>Conversations</h3><button id="link-email">Link email</button>${pendingReply(t,threads)?'<button id="mark-mail-reviewed">Mark replies reviewed</button>':''}</div>${emails.map(e=>`<div class="note"><strong>${esc(e.subject)}</strong><small>${esc(e.from)}</small><p>${esc(e.body)}</p>${attachmentButtons(e)}<button data-reply="${e.id}">Draft reply ↗</button></div>`).join('')||'<p class="muted">No emails linked to this task.</p>'}</details><details class="quick-more"><summary>Activity</summary>${t.activity.map(a=>`<p class="muted">${esc(a.text)} · ${esc(fmt(a.date))} ${a.emailId&&state.emails.some(e=>e.id===a.emailId)?`<button data-source-email="${esc(a.emailId)}">Source email</button>`:''}</p>`).join('')||'<p class="muted">No activity yet.</p>'}</details><details class="quick-more"><summary>Task settings</summary><div class="actions"><button id="edit-task">Dependencies & sharing</button>${s?'<button id="share-task">Shipment update preview</button>':''}<button id="delete-task" class="danger">Delete task</button></div></details>`,`<button type="button" id="task-customer-update">${controlIcon('mail')} Customer update</button>${t.status!=='Completed'?'<button id="complete-task" class="primary">Mark complete</button>':''}`,true);
+ $('#task-customer-update').onclick=()=>taskCustomerUpdate(t,children,cutoffThreads.filter(thread=>thread.taskIds.includes(id)||t.shipmentId&&thread.shipmentIds.includes(t.shipmentId)));
  bindAttachments();
  bindTaskShortcuts(t,children);
  const detail=$('#detail');
@@ -780,7 +787,7 @@ function inboxHTML(){
   <strong>${esc(item.latest.subject)}</strong>
   ${mailTypeLabel(item.latest)}
   ${item.taskIds.length?`<span class="mail-row-meta">${item.taskIds.length} linked</span>`:''}
- </button></div>`).join('');
+ </button>${inboxFilter==='Inbox'&&!mailSelecting?`<button class="mail-quick-task" type="button" data-quick-task="${esc(item.latest.id)}" aria-label="Create task from ${esc(item.latest.subject)}" title="Create task">${controlIcon('plus')}<span>Task</span></button>`:''}</div>`).join('');
  return `${e?`<button id="mail-back">${controlIcon('back')} Back to inbox</button>`:toolbar}${!e&&(mailSelecting||selectedCount)?`<div class="actions selection-bar mail-bulk-bar"><label><input type="checkbox" id="select-mail" ${threads.length&&threads.every(item=>selectedThreads.has(item.key))?'checked':''}> Select visible</label><span>${selectedCount} selected</span>${inboxFilter!=='Trash'?`<button id="bulk-email-archive" ${selectedCount?'':'disabled'}>${inboxFilter==='Archived'?'Unarchive':'Archive'}</button>`:''}<button id="bulk-mail-action" ${selectedCount?'':'disabled'}>${inboxFilter==='Trash'?'Restore selected':'Move selected to Trash'}</button></div>`:''}<div class="mail operator-inbox ${e?'mail-reader':'mail-index'}">
   ${e?'':`<div class="mail-list">${list||'<p class="empty">No conversations match.</p>'}</div>`}
   ${e?`<section class="mail-body" data-reader="${esc(e.id)}" aria-label="Conversation"><header class="conversation-header">
@@ -789,12 +796,13 @@ function inboxHTML(){
    ${mailTypeLabel(e)}
    <div class="actions">
     <button class="primary" id="email-reply">${e.connectionId?'Reply':'Draft reply'}</button>
-    ${inboxFilter==='Trash'?'':'<button id="email-task">Create task</button>'}<details class="mail-more"><summary>More</summary><div class="actions">${inboxFilter==='Trash'?'':'<button id="email-link">Link task</button><button id="email-link-operation">Link operation</button>'}
+    ${inboxFilter==='Trash'||captureEmailId===e.id?'':'<button id="email-task">Create task</button>'}<details class="mail-more"><summary>More</summary><div class="actions">${inboxFilter==='Trash'?'':'<button id="email-link">Link task</button><button id="email-link-operation">Link operation</button>'}
     ${!e.connectionId&&inboxFilter!=='Trash'?'<button id="email-edit">Edit captured email</button>':''}
     <button id="email-trash">${inboxFilter==='Trash'?'Restore':'Move to Trash'}</button>
     ${inboxFilter==='Trash'?'':`<button id="email-archive">${inboxFilter==='Archived'?'Restore to inbox':'Archive in Inboxy'}</button>`}</div></details>
    </div>
   </header>
+  ${inboxFilter!=='Trash'&&captureEmailId===e.id?composerHTML(e):''}
   ${match?`<div class="mail-suggested-match">
    <div><small>Exact reference match</small><strong>${esc([taskHeading(match),taskCustomer(match)].filter(Boolean).join(' · '))}</strong></div>
    <button type="button" id="link-suggested-task">Link task</button>
@@ -803,10 +811,9 @@ function inboxHTML(){
   ${thread.shipmentIds.map(id=>`<span class="actions"><button data-email-operation="${esc(id)}">${esc(shipment(id)?.reference)}</button><button data-unlink-operation="${esc(id)}">Unlink operation</button></span>`).join('')}
   ${cutoff?`<div class="task-reply-callout"><span>Cutoff change · ${esc(cutoff.email.subject)}</span>${cutoffReviewButton(cutoff)}</div>`:''}
   ${inboxFilter==='Trash'?'':emailReview(e,reviewTasks)}
-  ${inboxFilter!=='Trash'&&captureEmailId===e.id?composerHTML(e):''}
   ${thread.messages.map((message,index)=>`<details class="mail-message" ${(index===0||message.id===selectedEmail)?'open':''}><summary><strong>${esc(message.from)}</strong><time>${esc(fmt(message.date))}</time></summary><pre>${esc(message.body)}</pre>${attachmentButtons(message)}</details>`).join('')}
   </section>`:''}
- </div>${!e&&state.drafts.length?`<details class="quick-more mailbox-drafts"><summary>Saved drafts · ${state.drafts.length}</summary>${state.drafts.map(d=>`<div class="panel"><strong>${esc(d.subject)}</strong><p class="muted">${esc(d.to)} · ${esc(fmt(d.date))}</p><p style="white-space:pre-wrap">${esc(d.body)}</p>${state.emails.some(e=>e.id===d.emailId)?`<button data-resume-draft="${esc(d.id)}">Continue draft</button>`:''}</div>`).join('')}</details>`:''}`;
+ </div>${!e&&state.drafts.length?`<details class="quick-more mailbox-drafts"><summary>Saved drafts · ${state.drafts.length}</summary>${state.drafts.map(d=>`<div class="panel"><strong>${esc(d.subject)}</strong><p class="muted">${esc(d.to)} · ${esc(fmt(d.date))}</p><p style="white-space:pre-wrap">${esc(d.body)}</p>${!d.emailId||state.emails.some(e=>e.id===d.emailId)?`<button data-resume-draft="${esc(d.id)}">Continue draft</button>`:''}</div>`).join('')}</details>`:''}`;
 }
 function bindInbox(){
  const search=$('#mail-search');
@@ -820,6 +827,12 @@ function bindInbox(){
  $('#mail-select-mode')?.addEventListener('click',()=>{mailSelecting=!mailSelecting;selectedThreads.clear();render();});
  $('#mail-back')?.addEventListener('click',()=>{mailReading=false;captureEmailId='';mailActionDraft=null;render();window.scrollTo({top:mailListScroll,behavior:'instant'});});
  document.querySelectorAll('[data-email]').forEach(button=>button.onclick=()=>{mailListScroll=window.scrollY;selectedEmail=button.dataset.email;mailReading=true;captureEmailId='';mailActionDraft=null;render();window.scrollTo({top:0,behavior:'instant'});});
+ document.querySelectorAll('[data-quick-task]').forEach(button=>button.onclick=()=>{
+  const message=state.emails.find(item=>item.id===button.dataset.quickTask);
+  if(!message)return;
+  mailListScroll=window.scrollY;selectedEmail=message.id;mailReading=true;selectedThreads.clear();
+  startEmailTask(message,undefined,undefined,true);
+ });
  document.querySelectorAll('[data-open-linked]').forEach(button=>button.onclick=()=>taskDetail(button.dataset.openLinked));
  document.querySelectorAll('[data-unlink-task]').forEach(button=>button.onclick=()=>{
   for(const message of thread.messages){message.taskIds=taskLinks(message).filter(id=>id!==button.dataset.unlinkTask);message.taskId=null;}
@@ -906,9 +919,57 @@ function bindToday(){
   activity(task,'Marked complete');save();render();
  });
 }
-function captureEmail(){openDialog('Capture an email',`<div class="notice">Plain-text .eml imports only; attachments and encoded email formats are not imported. You can also paste the message below.</div><p><input id="eml" type="file" accept=".eml,text/plain" aria-label="Import plain-text email"></p><form id="email-form" class="form-grid"><label class="field full">From<input name="from" required placeholder="Name <email@example.com>"></label><label class="field full">Subject<input name="subject" required></label><label class="field full">Email body<textarea name="body" required></textarea></label></form>`,`<button class="primary" type="submit" form="email-form">Capture email</button>`);$('#eml').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>1000000)return toast('Use a plain-text email under 1 MB.');try{const mail=parseEmail(await file.text());const f=$('#email-form');for(const k of ['from','subject','body'])f.elements[k].value=mail[k];toast('Email loaded — review and capture');}catch(err){toast(err.message);}};$('#email-form').onsubmit=e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));if(!data.subject.trim()||!data.body.trim())return;const email={...data,id:uid(),date:new Date().toISOString(),taskId:null};state.emails.unshift(email);selectedEmail=email.id;save();$('#detail').close();render();toast('Email captured');};}
+function captureEmail(){openDialog('Capture an email',`<div class="notice">Plain-text .eml imports only; attachments and encoded email formats are not imported. You can also paste the message below.</div><p><input id="eml" type="file" accept=".eml,text/plain" aria-label="Import plain-text email"></p><form id="email-form" class="form-grid"><label class="field full">From<input name="from" required placeholder="Name <email@example.com>"></label><label class="field full">Subject<input name="subject" required></label><label class="field full">Email body<textarea name="body" required></textarea></label></form>`,`<button type="submit" form="email-form">Capture email</button><button class="primary" type="submit" form="email-form" value="task">Capture & create task</button>`);$('#eml').onchange=async e=>{const file=e.target.files[0];if(!file)return;if(file.size>1000000)return toast('Use a plain-text email under 1 MB.');try{const mail=parseEmail(await file.text());const f=$('#email-form');for(const k of ['from','subject','body'])f.elements[k].value=mail[k];toast('Email loaded — review and capture');}catch(err){toast(err.message);}};$('#email-form').onsubmit=e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));if(!data.subject.trim()||!data.body.trim())return;const email={...data,id:uid(),date:new Date().toISOString(),taskId:null};state.emails.unshift(email);selectedEmail=email.id;save();$('#detail').close();if(e.submitter?.value==='task'){inboxFilter='Inbox';mailReading=true;mailListScroll=window.scrollY;startEmailTask(email,undefined,undefined,true);return;}render();toast('Email captured');};}
 function linkEmail(taskId){openDialog('Link conversation',`<form id="link-form" class="form-grid"><label class="field full">Captured email<select name="email">${state.emails.filter(e=>!e.deletedAt&&!taskLinks(e).includes(taskId)).map(e=>`<option value="${e.id}">${esc(e.subject)}</option>`).join('')}</select></label></form>`,`<button type="submit" form="link-form" class="primary">Link email</button>`);$('#link-form').onsubmit=e=>{e.preventDefault();const email=state.emails.find(x=>x.id===new FormData(e.target).get('email'));if(!email)return toast('Capture an email first.');addMailLink(email,taskId);save();taskDetail(taskId);};}
-function draftReply(emailId,draft,prefill){const e=state.emails.find(x=>x.id===emailId);if(e?.connectionId&&cloud.workspace)return connectedReply(e,draft,prefill);openDialog('Draft a reply',`<div class="notice">This is a local draft. You can open it in your email app to review and send. Inboxy does not send or sync replies yet.</div><form id="reply-form" class="form-grid" style="margin-top:18px"><label class="field full">To<input name="to" type="email" required value="${esc(draft?.to||e.from.match(/<([^>]+)>/)?.[1]||e.from)}"></label><label class="field full">Subject<input name="subject" required value="${esc(draft?.subject||(/^re:/i.test(e.subject)?e.subject:'Re: '+e.subject))}"></label><label class="field full">Message<textarea name="body" required style="min-height:180px">${esc(draft?.body??prefill)}</textarea></label></form>`,`<button id="open-mail">Open in email app</button><button class="primary" type="submit" form="reply-form">Save draft</button>`);const read=()=>Object.fromEntries(new FormData($('#reply-form')));$('#open-mail').onclick=()=>{if(!$('#reply-form').reportValidity())return;const d=read();location.href=`mailto:${encodeURIComponent(d.to)}?subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`;};$('#reply-form').onsubmit=ev=>{ev.preventDefault();if(draft)Object.assign(draft,read(),{date:new Date().toISOString()});else state.drafts.unshift({...read(),id:uid(),emailId,date:new Date().toISOString()});save();$('#detail').close();render();toast('Draft saved locally — not sent');};}
+
+function taskCustomerUpdate(task,children,threads){
+ const linked=threads.filter(thread=>!thread.latest.deletedAt);
+ const status=({'Up next':'Up next','In progress':'In progress','Waiting':'Awaiting next step','Ready to bill':'Work in progress','Completed':'Completed'})[task.status]||'In progress';
+ const reference=task.customerReference||task.publicTitle||taskHeading(task);
+ openDialog('Customer update',`<form id="customer-update-form" class="form-grid customer-update-form">
+  ${linked.length?`<label class="field full">Send through<select name="email"><option value="" ${linked.length>1?'selected':''}>New email · open in your email app</option>${linked.map(thread=>`<option value="${esc(thread.latest.id)}" ${linked.length===1?'selected':''}>Reply · ${esc(thread.latest.subject||'(No subject)')}</option>`).join('')}</select></label>`:''}
+  <label class="field full">Status to share<input name="status" maxlength="180" required value="${esc(status)}"></label>
+  ${children.length?`<fieldset class="full"><legend>Checklist steps to share</legend>${children.map((step,i)=>`<label class="check-row"><input type="checkbox" name="step" value="${i}"><span>${esc(step.publicTitle||step.title)} <small>${step.status==='Completed'?'Complete':'Pending'}</small></span></label>`).join('')}</fieldset>`:''}
+  <label class="field full">Customer note <small>Optional</small><textarea name="note" rows="3" maxlength="2000" placeholder="Add details you want the customer to see"></textarea></label>
+ </form>`,`<button type="button" id="back-to-task">Back to task</button><button class="primary" type="submit" form="customer-update-form">Review email</button>`);
+ $('#back-to-task').onclick=()=>taskDetail(task.id);
+ $('#customer-update-form').onsubmit=event=>{
+  event.preventDefault();
+  const data=new FormData(event.target),statusText=data.get('status').trim();
+  if(!statusText)return toast('Enter a status to share.');
+  const selected=data.getAll('step').map(index=>children[Number(index)]).filter(Boolean);
+  const stepLines=selected.map(step=>'• '+(step.publicTitle||step.title)+' — '+(step.status==='Completed'?'Complete':'Pending'));
+  const body=['Hi,','Here’s the latest update for '+reference+'.','Status: '+statusText,stepLines.join('\n'),data.get('note').trim(),'Thank you.'].filter(Boolean).join('\n\n');
+  draftReply(data.get('email')||null,undefined,body,{taskUpdateId:task.id,subject:'Update · '+reference});
+ };
+}
+function emailRecipient(email){
+ const address=email?.replyTo||email?.from||'';
+ return address.match(/<([^>]+)>/)?.[1]||address;
+}
+function draftReply(emailId,draft,prefill,config={}){
+ const email=state.emails.find(item=>item.id===emailId);
+ const taskUpdateId=draft?.taskUpdateId||config.taskUpdateId;
+ if(email?.connectionId&&cloud.workspace)return connectedReply(email,draft,prefill,taskUpdateId);
+ const subject=draft?.subject||(email?(/^re:/i.test(email.subject)?email.subject:'Re: '+email.subject):config.subject);
+ openDialog(taskUpdateId?'Review customer update':'Draft a reply',
+  `<form id="reply-form" class="form-grid"><label class="field full">To<input name="to" type="email" required value="${esc(draft?.to||emailRecipient(email))}"></label><label class="field full">Subject<input name="subject" required value="${esc(subject)}"></label><label class="field full">Message<textarea name="body" rows="10" required>${esc(draft?.body??prefill)}</textarea></label></form>`,
+  `<button type="submit" form="reply-form">Save draft</button><button id="open-mail" type="button" class="primary">Open in email app</button>`);
+ const form=$('#reply-form');
+ const read=()=>Object.fromEntries(new FormData(form));
+ $('#open-mail').onclick=()=>{
+  if(!form.reportValidity())return;
+  const data=read();
+  location.href=`mailto:${encodeURIComponent(data.to)}?subject=${encodeURIComponent(data.subject)}&body=${encodeURIComponent(data.body)}`;
+ };
+ form.onsubmit=event=>{
+  event.preventDefault();
+  const entry={...read(),date:new Date().toISOString()};
+  if(draft)Object.assign(draft,entry);
+  else state.drafts.unshift({...entry,id:uid(),emailId,taskUpdateId});
+  save();$('#detail').close();render();toast('Draft saved locally — not sent');
+ };
+}
 function shipmentsHTML(){const matches=state.shipments.filter(s=>[s.reference,s.customer,s.route,s.container,state.clients.find(c=>c.id===s.clientId)?.name].join(' ').toLowerCase().includes(query.trim().toLowerCase()));return `<div class="shipment-grid">${matches.map(s=>{const tasks=state.tasks.filter(t=>t.shipmentId===s.id),done=tasks.filter(t=>t.status==='Completed').length;return `<section class="panel"><span class="eyebrow">${esc(s.reference)}</span><h2>${esc(s.customer)}</h2><p class="muted">${esc(s.route)}<br>${esc(s.container||'No container reference')}</p><span class="badge">${esc(s.publicStatus)}</span><div class="progress"><i style="width:${tasks.length?done/tasks.length*100:0}%"></i></div><p class="muted">${done} of ${tasks.length} tasks complete · ${tasks.filter(t=>blockedBy(t,state.tasks).length).length} blocked</p><div class="actions"><button data-shipment="${s.id}">View work</button><button data-customer="${s.id}">Customer update ↗</button><button data-edit-shipment="${s.id}" aria-label="Edit ${esc(s.reference)}">Edit</button></div></section>`;}).join('')}</div>`;}
 function shipmentEditor(id,clientId=''){const s=shipment(id)||{reference:'',customer:'',route:'',container:'',clientId,publicStatus:'Request received',publicUpdate:'',nextUpdate:''};openDialog(id?'Edit shipment':'New shipment',`<form id="shipment-form" class="form-grid"><label class="field">Client<select name="clientId">${clientOptions(s.clientId)}</select></label>${[['reference','Reference'],['customer','Customer'],['route','Route'],['container','Container / booking reference'],['publicStatus','Customer-facing status']].map(([k,l])=>`<label class="field">${l}<input name="${k}" value="${esc(s[k])}" ${['reference','publicStatus'].includes(k)?'required':''}></label>`).join('')}<label class="field">Next customer update<input name="nextUpdate" type="datetime-local" value="${esc(s.nextUpdate)}"></label><label class="field full">Customer-facing update<textarea name="publicUpdate">${esc(s.publicUpdate)}</textarea></label></form>`,`${id?'<button id="delete-operation" class="danger">Delete operation</button>':''}<button class="primary" form="shipment-form" type="submit">Save shipment</button>`);$('#delete-operation')?.addEventListener('click',()=>{
  if(!confirm('Delete this operation? Its tasks and emails will remain in the workspace.'))return;
@@ -1079,7 +1140,7 @@ function addWorkflowSteps(parent, steps) {
   state.tasks.push({...newTaskRecord({title, parentId:parent.id, shipmentId:parent.shipmentId, team:parent.team, owner:parent.owner}),stepOrder});
  }
 }
-function newTaskRecord(data){return {id:uid(),title:data.title.trim(),clientId:data.clientId||'',taskType:data.taskType||'',cutoff:data.cutoff||'',consequence:data.consequence||'',customer:data.customer?.trim()||'',ourReference:data.ourReference?.trim()||'',customerReference:data.customerReference?.trim()||'',workflow:data.workflow||'',ftzReference:data.ftzReference?.trim()||'',team:data.team|| (team==='All teams'?TEAMS[0]:team),owner:data.owner||'Unassigned',status:data.status||'Up next',priority:data.priority||'Normal',due:data.due||'',followUp:data.followUp||'',nextAction:data.nextAction||'',description:data.description||'',shipmentId:data.shipmentId||'',parentId:data.parentId||null,dependencies:[],notes:[],activity:[{text:'Task created',date:new Date().toISOString()}],public:false,publicTitle:'',impact:false,boardOrder:state.tasks.filter(t=>t.status===(data.status||'Up next')).length};}
+function newTaskRecord(data){const createdAt=new Date().toISOString();return {id:uid(),createdAt,title:data.title.trim(),clientId:data.clientId||'',taskType:data.taskType||'',cutoff:data.cutoff||'',consequence:data.consequence||'',customer:data.customer?.trim()||'',ourReference:data.ourReference?.trim()||'',customerReference:data.customerReference?.trim()||'',workflow:data.workflow||'',ftzReference:data.ftzReference?.trim()||'',team:data.team|| (team==='All teams'?TEAMS[0]:team),owner:data.owner||'Unassigned',status:data.status||'Up next',priority:data.priority||'Normal',due:data.due||'',followUp:data.followUp||'',nextAction:data.nextAction||'',description:data.description||'',shipmentId:data.shipmentId||'',parentId:data.parentId||null,dependencies:[],notes:[],activity:[{text:'Task created',date:createdAt}],public:false,publicTitle:'',impact:false,boardOrder:state.tasks.filter(t=>t.status===(data.status||'Up next')).length};}
 function composerHTML(email){
  const suggestedGroup=email?mailActionDraft?.team:'';
  const group=TEAMS.includes(suggestedGroup)?suggestedGroup:TEAMS.includes(team)?team:TEAMS[0];
@@ -1091,7 +1152,7 @@ function composerHTML(email){
    <label class="capture-group"><span>Group</span><select name="group" ${TEAMS.length?'':'disabled'}>${TEAMS.length?options(TEAMS,group):'<option>No groups</option>'}</select></label>
    <label class="capture-group"><span>Member</span><select name="member">${options(USERS,member)}</select></label>
    <div class="capture-submit-group">
-    ${email?'':'<button id="cancel-task-capture" type="button">Cancel</button>'}
+    <button id="cancel-task-capture" type="button">Cancel</button>
     <button class="primary capture-submit" type="submit">Add task</button>
    </div>
   </div>
@@ -1114,7 +1175,12 @@ function bindComposer(email){
  const form=$('#inline-capture');
  $('#cancel-task-capture')?.addEventListener('click',()=>{
   form.reset();form.querySelector('.capture-extras').open=false;setCustomerChoice(form,'');
-  captureOpen=false;render();$('#new-task')?.focus();
+  const returnToInbox=email&&mailActionDraft?.returnToInbox;
+  if(email){captureEmailId='';mailActionDraft=null;if(returnToInbox)mailReading=false;}
+  else captureOpen=false;
+  render();
+  if(returnToInbox)window.scrollTo({top:mailListScroll,behavior:'instant'});
+  (email?document.querySelector(returnToInbox?'[data-quick-task]':'#email-task'):$('#new-task'))?.focus({preventScroll:true});
  });
  bindWorkflow(form);
  bindCustomerPicker(form,()=>{});
@@ -1141,11 +1207,15 @@ function bindComposer(email){
   }
   if(form.elements.customerChoice.value){task.clientId=form.elements.customerChoice.value;task.customer='';}
   state.tasks.push(task);addWorkflowSteps(task,steps);
-  if(email){addMailLink(email,task.id);captureEmailId='';mailActionDraft=null;}
+  if(email){
+   addMailLink(email,task.id);captureEmailId='';mailActionDraft=null;
+   if(draft?.returnToInbox)mailReading=false;
+  }
   else captureOpen=false;
   form.reset();form.querySelector('.capture-extras').open=false;setCustomerChoice(form,'');form.elements.workflow.onchange();
   save();render();
-  if(email)taskDetail(task.id);
+  if(draft?.returnToInbox)window.scrollTo({top:mailListScroll,behavior:'instant'});
+  else if(email)taskDetail(task.id);
   else $('#new-task')?.focus();
   toast(task.team?'Task added to '+task.team:'Task added');
  };
@@ -1168,6 +1238,7 @@ function taskProperties(task,timing='',step,threads=[]){
   ${parent?field('title','Work to do',task.title):''}
   ${linkedEmailSubject(task,threads)}
   ${customerPicker(task.clientId,{label:taskCustomer(task)})}
+  ${taskCreatedLabel(task)}
   <p class="muted task-reference-line" ${taskReferences(task).length?'':'hidden'}>${esc([...new Set(taskReferences(task))].join(' · '))}</p>
   <div class="task-action-brief">
    ${field('nextAction','Next action',task.nextAction,{display:nextAction(task),style:'task-next-value'})}
@@ -1342,11 +1413,11 @@ function disconnectMailbox(connection){
  openDialog('Disconnect mailbox','<p>Stop Inboxy from syncing or sending through this account. Previously imported messages and task references stay in this workspace. You can also revoke Inboxy in your email provider’s account settings.</p>','<button id="mail-keep">Cancel</button><button class="danger" id="mail-remove">Disconnect</button>');
  $('#mail-keep').onclick=()=>$('#detail').close();$('#mail-remove').onclick=async e=>{e.target.disabled=true;try{await mailAction('disconnect',{connection});mailboxCursors.delete(connection);mailboxStatusCache=null;$('#detail').close();renderMailPanel();toast('Mailbox disconnected');}catch(err){toast(err.message);e.target.disabled=false;}};
 }
-async function connectedReply(email,draft,prefill){
- const recipient=email.replyTo?.match(/<([^>]+)>/)?.[1]||email.replyTo||email.from.match(/<([^>]+)>/)?.[1]||email.from;
- openDialog('Reply by email',`<p class="notice">This will send a real email from the connected mailbox. Review the recipient and message before sending.</p><form id="connected-reply" class="form-grid"><label class="field full">To<input name="to" type="email" required value="${esc(draft?.to||recipient)}"></label><label class="field full">Subject<input name="subject" required value="${esc(draft?.subject||(/^re:/i.test(email.subject)?email.subject:'Re: '+email.subject))}"></label><label class="field full">Message<textarea name="body" required maxlength="50000" style="min-height:180px">${esc(draft?.body??prefill)}</textarea></label></form>`,'<button id="keep-reply-draft">Save draft</button><button class="primary" type="submit" form="connected-reply">Send reply</button>');
- $('#keep-reply-draft').onclick=()=>{const f=Object.fromEntries(new FormData($('#connected-reply')));if(draft)Object.assign(draft,f,{date:new Date().toISOString()});else state.drafts.unshift({...f,id:uid(),emailId:email.id,date:new Date().toISOString()});save();$('#detail').close();toast('Reply draft saved — not sent');};
- $('#connected-reply').onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));const buttons=$('#detail').querySelectorAll('button');buttons.forEach(b=>b.disabled=true);try{await mailAction('reply',{connection:email.connectionId,email:email.id,...f});if(draft){state.drafts=state.drafts.filter(d=>d.id!==draft.id);save();}$('#detail').close();render();toast('Reply sent');}catch(err){toast('Reply not confirmed: '+err.message+'. Check your Sent folder before trying again.');buttons.forEach(b=>b.disabled=false);}};
+async function connectedReply(email,draft,prefill,taskUpdateId){
+ const recipient=emailRecipient(email);
+ openDialog(taskUpdateId?'Review customer update':'Reply by email',`<p class="notice">This will send a real email from the connected mailbox. Review the recipient and message before sending.</p><form id="connected-reply" class="form-grid"><label class="field full">To<input name="to" type="email" required value="${esc(draft?.to||recipient)}"></label><label class="field full">Subject<input name="subject" required value="${esc(draft?.subject||(/^re:/i.test(email.subject)?email.subject:'Re: '+email.subject))}"></label><label class="field full">Message<textarea name="body" required maxlength="50000" style="min-height:180px">${esc(draft?.body??prefill)}</textarea></label></form>`,'<button id="keep-reply-draft">Save draft</button><button class="primary" type="submit" form="connected-reply">'+(taskUpdateId?'Send update':'Send reply')+'</button>');
+ $('#keep-reply-draft').onclick=()=>{const f=Object.fromEntries(new FormData($('#connected-reply')));if(draft)Object.assign(draft,f,{date:new Date().toISOString()});else state.drafts.unshift({...f,id:uid(),emailId:email.id,taskUpdateId,date:new Date().toISOString()});save();$('#detail').close();toast('Reply draft saved — not sent');};
+ $('#connected-reply').onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));const buttons=$('#detail').querySelectorAll('button');buttons.forEach(b=>b.disabled=true);try{await mailAction('reply',{connection:email.connectionId,email:email.id,...f});if(draft)state.drafts=state.drafts.filter(d=>d.id!==draft.id);const task=state.tasks.find(item=>item.id===taskUpdateId);if(task)activity(task,'Customer update emailed');if(draft||task)save();$('#detail').close();render();toast(taskUpdateId?'Customer update sent':'Reply sent');}catch(err){toast('Reply not confirmed: '+err.message+'. Check your Sent folder before trying again.');buttons.forEach(b=>b.disabled=false);}};
 }
 
 function myOwner(){
@@ -1403,7 +1474,7 @@ function taskTable(list){
  for(const task of list){const label=groupLabel(task);if(!groups.has(label))groups.set(label,[]);groups.get(label).push(task);}
  return counts+bulk+([...groups].map(([label,tasks])=>`${label?`<h3 class="task-group-label">${esc(label)} <small>${tasks.length}</small></h3>`:''}<div class="table-wrap"><table><thead><tr><th></th><th>Task / next action</th><th>Reference</th><th>Department / owner</th><th>Status</th><th>Deadline</th><th>Priority / follow-up</th></tr></thead><tbody>${tasks.map(t=>`<tr tabindex="0" data-task="${esc(t.id)}">
   <td><input type="checkbox" data-select-task="${esc(t.id)}" aria-label="Select ${esc(t.title)}" ${selectedTasks.has(t.id)?'checked':''}></td>
-  <td><strong>${esc(taskHeading(t))}</strong>${linkedEmailSubject(t,threads)}${taskCustomer(t)?`<small class="task-row-customer">${esc(taskCustomer(t))}</small>`:''}<p class="muted">${esc(handoffParent(t)?t.title:t.description||nextAction(t)||t.taskType||'')}</p></td>
+  <td><strong>${esc(taskHeading(t))}</strong>${linkedEmailSubject(t,threads)}${taskCustomer(t)?`<small class="task-row-customer">${esc(taskCustomer(t))}</small>`:''}${taskCreatedLabel(t)}<p class="muted">${esc(handoffParent(t)?t.title:t.description||nextAction(t)||t.taskType||'')}</p></td>
   <td><small>${esc(taskReferences(t).join(' · ')||'—')}</small></td>
   <td><select data-row-field="team" aria-label="Group">${options(TEAMS,t.team)}</select><select data-row-field="owner" aria-label="Owner">${options(USERS,t.owner)}</select>
    ${t.owner==='Unassigned'&&myOwner()?'<button data-claim>Claim</button>':''}</td>
@@ -1627,7 +1698,7 @@ function suggestedMailTask(thread){
   [...taskReferences(task),/^[A-Z]{2,8}[- ]?\d[A-Z0-9-]*$/i.test(task.title)?task.title:''].some(ref=>exactReferenceIn(subject,ref)||exactReferenceIn(reference,ref)));
  return matches.length===1?matches[0]:null;
 }
-function startEmailTask(message,title,requestKey){
+function startEmailTask(message,title,requestKey,returnToInbox=false){
  const {requests,...suggested}=mailSuggestions(message,state);
  if(!title&&requests.length===1)title=requests[0];
  if(!suggested.shipmentId){
@@ -1643,7 +1714,7 @@ function startEmailTask(message,title,requestKey){
  const teams={'AES filing':'Ops',Pickup:'Ops',Documentation:'Ops','Inventory report':'Warehouse','Cargo release':'Warehouse'};
  const department=TEAMS.includes(teams[taskType])?teams[taskType]:'';
  const assignees=state.groups.find(item=>item.name===department)?.members||[];
- mailActionDraft={...suggested,taskType,title,requestKey,...(department?{team:department}:{}),...(assignees.length===1?{owner:assignees[0]}:{})};
+ mailActionDraft={...suggested,taskType,title,requestKey,returnToInbox,...(department?{team:department}:{}),...(assignees.length===1?{owner:assignees[0]}:{})};
  captureEmailId=message.id;render();$('#inline-capture input').focus();
 }
 function composerSuggestions(draft){

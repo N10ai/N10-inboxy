@@ -1518,3 +1518,16 @@ body::before { background: none; }
  .capture-submit-group{grid-column:1/-1;justify-content:flex-end}
  #app .template-step-controls button{width:28px}
 }
+
+#app .mail-select-row:has(.mail-quick-task){grid-template-columns:auto minmax(0,1fr) auto}
+#app .mail-quick-task{display:inline-flex;justify-content:center;align-items:center;gap:.25rem;margin-inline-end:.45rem;padding-inline:.55rem;min-height:38px;white-space:nowrap}
+@media(max-width:760px){
+ #app .mail-select-row:not(.mail-selection-mode):has(.mail-quick-task){grid-template-columns:minmax(0,1fr) auto}
+ #app .mail-quick-task{min-width:44px;min-height:44px}
+ #app .mail-quick-task span{display:none}
+}
+.task-created{display:block;width:fit-content;font-size:.72rem;color:var(--control-muted);margin:.25rem 0}
+#detail .customer-update-form fieldset{border:1px solid var(--control-line);border-radius:12px;padding:.5rem .75rem;min-width:0}
+#detail .customer-update-form legend{padding:0 .25rem;font-weight:650}
+#detail .customer-update-form small{color:var(--control-muted)}
+#detail #task-customer-update{margin-inline-end:auto}
