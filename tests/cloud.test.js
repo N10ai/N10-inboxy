@@ -726,3 +726,49 @@ test('task report downloads selected visible tasks with Excel-safe CSV cells',as
   assert.doesNotMatch(csv,/Other task/);
  }finally{dom.window.close();}
 });
+
+
+test('quick capture links the email, returns to the inbox and shows the creation date',async()=>{
+ const mail={id:'quick-mail',threadId:'quick-thread',from:'Client <client@example.invalid>',subject:'PU 500',body:'Please arrange pickup.',date:'2026-11-25T10:00:00Z'};
+ const {dom,w,snapshot}=await app(true,{emails:[mail]});
+ try{
+  const doc=w.document;
+  doc.querySelector('[data-page="inbox"]').click();
+  doc.querySelector('[data-quick-task="quick-mail"]').click();
+  const form=doc.querySelector('#inline-capture');
+  assert.equal(doc.activeElement,form.elements.title);
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  assert.ok(doc.querySelector('#mail-folder'));
+  assert.equal(doc.querySelector('[data-email="quick-mail"]'),null);
+  await new Promise(resolve=>setTimeout(resolve,100));
+  assert.equal(snapshot.emails[0].taskIds[0],snapshot.tasks[0].id);
+  assert.ok(Number.isFinite(Date.parse(snapshot.tasks[0].createdAt)));
+  doc.querySelector('[data-page="workspace"]').click();
+  assert.equal(doc.querySelector('.task-created').dateTime,snapshot.tasks[0].createdAt);
+ }finally{dom.window.close();}
+});
+
+test('customer update previews only selected steps and customer-facing notes',async()=>{
+ const fields={team:'Ops',owner:'Unassigned',priority:'Normal',activity:[],dependencies:[],notes:[]};
+ const tasks=[{...fields,id:'parent',title:'PU 500',status:'In progress',notes:[{text:'Internal pricing note'}]},
+  {...fields,id:'step1',title:'Carrier booked',status:'Completed',parentId:'parent'},
+  {...fields,id:'step2',title:'Check internal invoice',status:'Up next',parentId:'parent'}];
+ const mail={id:'update-thread',from:'Client <client@example.invalid>',subject:'PU 500',date:'2026-11-25T10:00:00Z',connectionId:'gmail',taskId:'parent'};
+ const {dom,w,requests}=await app(true,{tasks,emails:[mail]});
+ try{
+  const doc=w.document;
+  doc.querySelector('[data-task="parent"] .card-open').click();
+  doc.querySelector('#task-customer-update').click();
+  const form=doc.querySelector('#customer-update-form');
+  assert.equal(form.elements.email.value,mail.id);
+  form.querySelector('[name="step"]').checked=true;
+  form.elements.note.value='Pickup confirmed for tomorrow.';
+  form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+  const reply=doc.querySelector('#connected-reply');
+  assert.equal(reply.elements.to.value,'client@example.invalid');
+  assert.match(reply.elements.body.value,/Carrier booked — Complete/);
+  assert.match(reply.elements.body.value,/Pickup confirmed for tomorrow/);
+  assert.doesNotMatch(reply.elements.body.value,/Check internal invoice|Internal pricing note/);
+  assert.ok(!requests.some(request=>request.body&&JSON.parse(request.body).action==='reply'));
+ }finally{dom.window.close();}
+});
