@@ -24,7 +24,7 @@ test('signed-out users see auth and can explore the local demo',async()=>{const 
 test('signed-in workspace loads without sample tasks and saves a quick task',async()=>{const {dom,w,requests,snapshot}=await app(true);try{assert.equal(w.document.querySelector('h1').textContent,'Operations inbox');assert.match(w.document.querySelector('.workspace').textContent,/Test Operations/);assert.equal(snapshot.tasks.length,0);w.document.querySelector('#new-task').click();const form=w.document.querySelector('#inline-capture');assert.equal(w.document.querySelector('#detail').open,false);assert.equal(w.document.activeElement,form.elements.title);form.elements.title.value='Wrap pallet 3';form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,100));assert.equal(snapshot.tasks[0].title,'Wrap pallet 3');assert.ok(requests.some(r=>r.url.endsWith('/rpc/inboxy_save')));assert.equal(w.localStorage.getItem('inboxy.workspace.v1'),null);}finally{dom.window.close();}});
 
 test('group editor customizes color and icon, and empty-group deletion works in the UI',async()=>{const {dom,w}=await app();try{w.document.querySelector('#demo-mode').click();w.document.querySelector('[data-page="groups"]').click();w.document.querySelector('#new-group').click();const form=w.document.querySelector('#group-form');form.elements.name.value='Dispatch';form.elements.color.value='#225588';form.elements.icon.value='◈';form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));const saved=JSON.parse(w.localStorage.getItem('inboxy.workspace.v1'));const group=saved.groups.find(g=>g.name==='Dispatch');assert.equal(group.color,'#225588');assert.equal(group.icon,'◈');w.document.querySelector(`[data-edit-group="${group.id}"]`).click();w.document.querySelector('#delete-group').click();w.document.querySelector('#delete-group-form').dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert.equal(JSON.parse(w.localStorage.getItem('inboxy.workspace.v1')).groups.some(g=>g.id===group.id),false);}finally{dom.window.close();}});
-test('email connections show missing setup and an actionable setup guide',async()=>{const {dom,w}=await app(true);try{w.document.querySelector('[data-page="settings"]').click();await new Promise(r=>setTimeout(r,100));assert.match(w.document.querySelector('#mail-integrations').textContent,/Provider setup needed/);assert.equal(w.document.querySelector('[data-mail-connect]').disabled,true);w.document.querySelector('[data-mail-setup]').click();assert.match(w.document.querySelector('#detail').textContent,/GOOGLE_MAIL_CLIENT_SECRET/);}finally{dom.window.close();}});
+test('email connections show missing setup and an actionable setup guide',async()=>{const {dom,w}=await app(true);try{w.document.querySelector('[data-page="settings"]').click();w.document.querySelector('[data-settings-tab="Connections"]').click();await new Promise(r=>setTimeout(r,100));assert.match(w.document.querySelector('#mail-integrations').textContent,/Provider setup needed/);assert.equal(w.document.querySelector('[data-mail-connect]').disabled,true);w.document.querySelector('[data-mail-setup]').click();assert.match(w.document.querySelector('#detail').textContent,/GOOGLE_MAIL_CLIENT_SECRET/);}finally{dom.window.close();}});
 
 test('pickup workflow creates selected subtasks and checks them off from the parent', async () => {
  const {dom,w,snapshot}=await app(true);
@@ -88,10 +88,17 @@ test('custom FTZ steps are used for new tasks and follow-up queue isolates activ
   const doc=w.document;
   const submit=form=>form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
   doc.querySelector('#customize-ftz').click();
-  const editor=doc.querySelector('#ftz-template-form');
-  editor.elements.steps.value='Check carrier tally\nConfirm warehouse receipt';
-  submit(editor);
-  doc.querySelector('[data-close]').click();
+  assert.equal(doc.querySelector('h1').textContent,'Workspace settings');
+  const settings=()=>doc.querySelector('#ftz-template-form');
+  settings().elements.template.value='FTZ · Admission (214)';
+  settings().elements.template.dispatchEvent(new w.Event('change'));
+  while(settings().querySelectorAll('[name="step"]').length>1)settings().querySelector('[data-step-remove="1"]').click();
+  settings().querySelector('[name="step"]').value='Confirm warehouse receipt';
+  doc.querySelector('#add-template-step').click();
+  settings().querySelectorAll('[name="step"]')[1].value='Check carrier tally';
+  settings().querySelector('[data-step-index="1"][data-step-move="-1"]').click();
+  submit(settings());
+  doc.querySelector('[data-page="workspace"]').click();
   doc.querySelector('#new-task').click();
   const task=doc.querySelector('#inline-capture');
   task.elements.title.value='Follow up on admission';
@@ -543,7 +550,7 @@ test('desktop-style selection archives without entering selection mode and task 
 
 test('task capture has one entry point and keeps optional fields collapsed',async()=>{
  const groups=['Ops','Warehouse'].map(name=>({id:name.toLowerCase(),name,members:[]}));
- const {dom,w,snapshot}=await app(true,{groups});
+ const {dom,w,snapshot}=await app(true,{groups,people:[{id:'dispatch',name:'Ana'}]});
  try{
   const doc=w.document;
   assert.equal(doc.querySelectorAll('[data-add-status],[data-quick-status],#quick-add,#dock-add').length,0);
@@ -555,11 +562,13 @@ test('task capture has one entry point and keeps optional fields collapsed',asyn
   assert.equal(doc.querySelector('#new-task'),null);
   assert.equal(doc.activeElement,form.elements.title);
   assert.equal(form.elements.group.value,'Ops');
+  form.elements.member.value='Ana';
   form.elements.title.value='PU 200';
   form.elements.group.value='Warehouse';
   doc.querySelector('[data-view="Groups"]').click();
   form=doc.querySelector('#inline-capture');
   assert.equal(form.elements.group.value,'Warehouse');
+  assert.equal(form.elements.member.value,'Ana');
   form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
   assert.equal(doc.querySelector('#inline-capture').hidden,true);
   assert.equal(doc.activeElement.id,'new-task');
@@ -567,6 +576,7 @@ test('task capture has one entry point and keeps optional fields collapsed',asyn
   doc.querySelector('.card-open').click();
   await new Promise(resolve=>setTimeout(resolve,100));
   assert.equal(snapshot.tasks[0].team,'Warehouse');
+  assert.equal(snapshot.tasks[0].owner,'Ana');
   assert.ok(doc.querySelector('.task-tools'));
   assert.equal(doc.querySelector('#checklist-add-editor').hidden,true);
   doc.querySelector('#show-checklist-add').click();

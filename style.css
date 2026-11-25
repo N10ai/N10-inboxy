@@ -1443,3 +1443,78 @@ body::before { background: none; }
 :root { --accent: #252525; --accent-wash: #ececec; }
 .primary svg { color: currentColor; }
 .heading .primary::first-letter { color: inherit; }
+
+/* Curved monochrome navigation */
+.sidebar-cap{display:flex;align-items:center;gap:.45rem;padding:4px 3px 10px;border-bottom:1px solid #ffffff30;margin-bottom:8px}
+.sidebar-cap strong{font-size:.8rem;letter-spacing:.05em}
+.sidebar-brand{display:grid;place-items:center;width:27px;height:27px;flex:none;border:1px solid #fff6;border-radius:9px;background:#fff2;font-size:.6rem;font-weight:750}
+#app #sidebar-toggle{display:grid;place-items:center;flex:none;margin-left:auto;width:30px;height:30px;min-height:0;padding:0;background:#fff1;color:inherit;border:1px solid #fff3;border-radius:9px}
+#app #sidebar-toggle .control-icon{width:15px;height:15px}
+@media(min-width:761px){
+ #app .shell{grid-template-columns:clamp(154px,14vw,192px) minmax(0,1fr)}
+ #app .shell.sidebar-compact{grid-template-columns:56px minmax(0,1fr)}
+ #app .sidebar{
+  padding:9px;color:#fff;border-radius:24px 24px 30px 30px;border:1px solid #ffffffa8;
+  background:linear-gradient(160deg,#ffffff29,transparent 36%,#fff1 74%),linear-gradient(150deg,#555555ea,#252525ec 43%,#3e3e3eed);
+  box-shadow:inset 0 1px 1px #fff6,inset 1px 0 1px #fff3,0 13px 27px #0003,0 0 0 1px #0002;
+ }
+ #app .sidebar .nav{gap:4px}
+ #app .sidebar .nav button{color:#f3f3f3;border-radius:10px;min-height:33px}
+ #app .sidebar .nav button:hover{color:#fff;background:#fff2}
+ #app .sidebar .nav button.active{color:#161616;background:#fafafa;box-shadow:0 2px 7px #0005}
+ #app .sidebar .nav button:not(.active) .count{color:#fff;background:#fff2}
+ #app .sidebar .nav button.active .count{color:#1b1b1b;background:#0001}
+ #app .sidebar .nav button:focus-visible,#app #sidebar-toggle:focus-visible{outline:2px solid #fff;outline-offset:1px}
+ #app .sidebar :is(.sidebar-groups,.nav label){border-color:#fff3}
+ #app .sidebar .nav label{background:#fff3}
+ #app .sidebar .sidebar-groups h2{color:#ededed}
+ #app .sidebar .group-dot{background:#c9c9c9;box-shadow:0 0 0 1px #fff5}
+ #app .sidebar [data-team].active .group-dot{background:#222}
+ #app .sidebar-compact .sidebar{padding:7px}
+ #app .sidebar-compact .sidebar-cap{justify-content:center;padding-inline:0}
+ #app .sidebar-compact #sidebar-toggle{margin:0}
+ #app .sidebar-compact .sidebar-cap :is(.sidebar-brand,strong),
+ #app .sidebar-compact .sidebar .nav :is(button>span,button>small,.sidebar-group-edit,.sidebar-groups h2){display:none}
+ #app .sidebar-compact .sidebar .nav :is(button[data-page],button[data-team]){justify-content:center;min-height:34px;padding:0}
+ #app .sidebar-compact .sidebar .sidebar-group-row [data-team]::after{content:attr(data-initials);font-weight:700;font-size:.7rem}
+ #app .sidebar-compact .sidebar .group-dot{display:none}
+}
+@media(max-width:760px){
+ #app .glass-dock{gap:2px;padding-inline:4px}
+ #app .glass-dock>button{flex:1;min-width:0;padding-inline:2px}
+ #app .glass-dock>button span{font-size:clamp(.57rem,2.1vw,.74rem)}
+}
+@media(prefers-reduced-transparency:reduce){
+ #app .sidebar{background:#333;color:#fff}
+}
+
+/* Fast capture and workflow settings */
+#app .capture-row{grid-template-columns:minmax(0,1fr) repeat(2,minmax(6.75rem,9rem)) auto}
+#app .capture-template-bar{display:flex;align-items:start;gap:.45rem;flex-wrap:wrap;margin-top:.55rem}
+#app .capture-template-bar .template-preview{flex-basis:100%;margin:0}
+#app .capture-template-bar .capture-template{margin:0;min-width:0;max-width:100%}
+#app .capture-template-bar select{max-width:100%}
+#app .settings-nav{width:fit-content;max-width:100%;margin-bottom:1rem}
+#app .template-settings{max-width:52rem;padding:clamp(.85rem,3vw,1.6rem)}
+.template-header{display:flex;align-items:start;justify-content:space-between;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
+.template-header h2,.template-header p{margin:0}
+.template-header p{margin-top:.35rem}
+#app :is(#new-template,#add-template-step){display:inline-flex;align-items:center;gap:.35rem}
+.template-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr));gap:.55rem}
+.template-fields :is(select,input){min-width:0;width:100%}
+.template-steps{list-style:none;margin:0 0 .55rem;padding:0;display:grid;gap:.4rem}
+.template-steps li{display:grid;grid-template-columns:1.65rem minmax(0,1fr) auto;align-items:center;gap:.3rem}
+.template-step-number{display:grid;place-items:center;width:1.55rem;height:1.55rem;background:#0001;border-radius:7px;font-size:.72rem;font-variant-numeric:tabular-nums}
+.template-step-controls{display:flex;gap:.15rem}
+#app .template-step-controls button{width:32px;min-height:36px;padding:0;display:grid;place-items:center}
+#app .template-step-controls button:disabled{opacity:.26}
+.template-footer{display:flex;justify-content:flex-end;gap:.45rem;margin-top:1rem;padding-top:.8rem;border-top:1px solid var(--control-line)}
+@media(max-width:940px){
+ #app .capture-row{grid-template-columns:repeat(2,minmax(0,1fr)) auto}
+ #app .capture-row>input{grid-column:1/-1}
+}
+@media(max-width:490px){
+ #app .capture-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .capture-submit-group{grid-column:1/-1;justify-content:flex-end}
+ #app .template-step-controls button{width:28px}
+}
