@@ -772,3 +772,27 @@ test('customer update previews only selected steps and customer-facing notes',as
   assert.ok(!requests.some(request=>request.body&&JSON.parse(request.body).action==='reply'));
  }finally{dom.window.close();}
 });
+
+test('mobile workspace menu isolates the sidebar and restores focus on dismiss or navigation',async()=>{
+ const {dom,w}=await app(true);
+ try{
+  const doc=w.document, open=()=>doc.querySelector('#mobile-menu-toggle').click();
+  open();
+  const sidebar=doc.querySelector('#workspace-sidebar');
+  assert.equal(sidebar.getAttribute('aria-modal'),'true');
+  assert.equal(doc.activeElement.id,'mobile-menu-close');
+  assert.ok(doc.querySelector('.main').hasAttribute('inert'));
+  sidebar.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  assert.equal(doc.querySelector('#mobile-menu-toggle').getAttribute('aria-expanded'),'false');
+  assert.equal(doc.activeElement.id,'mobile-menu-toggle');
+  assert.ok(!doc.querySelector('.main').hasAttribute('inert'));
+  open();
+  sidebar.querySelector('[data-team="Ops"]').click();
+  assert.equal(doc.querySelector('h1').textContent,'Ops space');
+  assert.equal(doc.activeElement,doc.querySelector('h1'));
+  assert.ok(!doc.querySelector('.shell').classList.contains('mobile-nav-open'));
+  open();
+  doc.querySelector('#workspace-sidebar [data-page="settings"]').click();
+  assert.equal(doc.querySelector('h1').textContent,'Workspace settings');
+ }finally{dom.window.close();}
+});
