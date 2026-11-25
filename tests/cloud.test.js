@@ -796,3 +796,20 @@ test('mobile workspace menu isolates the sidebar and restores focus on dismiss o
   assert.equal(doc.querySelector('h1').textContent,'Workspace settings');
  }finally{dom.window.close();}
 });
+
+test('phone board selects a full-width status and retains it when the board rerenders',async()=>{
+ const {dom,w}=await app();
+ try{
+  const doc=w.document;
+  doc.querySelector('#demo-mode').click();
+  const selected=()=>doc.querySelector('#status-board [data-phone-selected="true"]');
+  const picker=doc.querySelector('#phone-board-status');
+  assert.equal(selected().dataset.status,picker.value);
+  picker.value='In progress';
+  picker.dispatchEvent(new w.Event('change'));
+  assert.equal(selected().dataset.status,'In progress');
+  doc.querySelector('[data-view="Board"]').click();
+  assert.equal(doc.querySelector('#phone-board-status').value,'In progress');
+  assert.equal(selected().dataset.status,'In progress');
+ }finally{dom.window.close();}
+});
